@@ -111,6 +111,8 @@ export interface LogEntry {
   /** Place to flash on the map. */
   loc?: LocId;
   spot?: string;
+  /** An item was discovered: shown as a popup to this side. */
+  found?: KnownSpot;
 }
 
 export interface HumanKnowledge {

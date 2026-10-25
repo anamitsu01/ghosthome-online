@@ -198,7 +198,13 @@ export function updateSettings(room: RoomState, hostId: string, settings: Partia
 
 // ---------- logging ----------
 
-function log(room: RoomState, to: Audience, text: string, tone: Tone = "info", where: { loc?: LocId; spot?: string } = {}): void {
+function log(
+  room: RoomState,
+  to: Audience,
+  text: string,
+  tone: Tone = "info",
+  where: { loc?: LocId; spot?: string; found?: KnownSpot } = {}
+): void {
   room.logs.push({ seq: ++room.logSeq, to, text, tone, ...where });
   room.logs = room.logs.slice(-LOGS_KEPT);
 }
@@ -518,6 +524,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   if (content?.type !== "ghost") {
     log(room, "ghost", `${spotName(spotId)}を探索: ${content ? `${ITEMS[content.item.kind].name}(人間の道具)` : "何もない"}`, "info", {
       spot: spotId,
+      found: content ? known(content) : undefined,
     });
     return;
   }
@@ -527,7 +534,11 @@ function ghostSearch(room: RoomState, spotId: string): void {
   g.collected += 1;
   if (!content.fake) g.real += 1;
   g.held.push(content.name);
-  log(room, "ghost", `✨ ${spotName(spotId)}で${GHOST_ITEMS[content.name].name}を手に入れた!`, "good", { spot: spotId });
+  log(room, "ghost", `✨ ${spotName(spotId)}で${GHOST_ITEMS[content.name].name}を手に入れた!`, "good", {
+    spot: spotId,
+    // The ghost can't tell a fake from the real thing.
+    found: { type: "ghost", name: content.name, fake: false },
+  });
   if (g.collected === 1) {
     g.hp += 1;
     room.turn.step = "warp";
@@ -699,7 +710,10 @@ function arriveHunter(room: RoomState, h: Hunter, loc: LocId): void {
   if (room.hidden && room.hidden.room === loc && has(h, "flashlight") && !room.humanKnow.hiddenFound) {
     room.humanKnow.hiddenFound = true;
     room.humanKnow.hiddenRoom = loc;
-    log(room, "human", `🔦 懐中電灯が${ROOM[loc].name}に隠された${ITEMS[room.hidden.kind].name}を照らし出した!(探索で取れる)`, "good", { loc });
+    log(room, "human", `🔦 懐中電灯が${ROOM[loc].name}に隠された${ITEMS[room.hidden.kind].name}を照らし出した!(探索で取れる)`, "good", {
+      loc,
+      found: { type: "human", kind: room.hidden.kind },
+    });
     if (room.ghost.loc === loc) log(room, "ghost", `${hunterName(h)}が${ROOM[loc].name}で何かを見つけたようだ…`, "warn", { loc });
   }
   if (h.character === "miko") {
@@ -798,7 +812,10 @@ function hunterSearch(room: RoomState, h: Hunter, spotId: string): void {
 
   const content = room.spots[spotId];
   room.humanKnow.spots[spotId] = known(content);
-  log(room, "human", `${hunterName(h)}が${spotName(spotId)}を探索: ${describe(content)}`, "info", { spot: spotId });
+  log(room, "human", `${hunterName(h)}が${spotName(spotId)}を探索: ${describe(content)}`, "info", {
+    spot: spotId,
+    found: content ? known(content) : undefined,
+  });
   if (room.ghost.loc === spot.room) {
     log(room, "ghost", `${hunterName(h)}が${spotName(spotId)}を探索した: ${describe(content)}`, "warn", { spot: spotId });
   }

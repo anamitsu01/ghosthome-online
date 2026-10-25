@@ -137,7 +137,7 @@ export default function GameRoom({ code }: { code: string }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-4">
       <div className="flex items-center justify-between">
         <Logo size="sm" />
         <div className="flex gap-2">

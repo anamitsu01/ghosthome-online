@@ -146,28 +146,28 @@ export interface Rect {
 }
 
 export const PLAN_W = 600;
-export const PLAN_H = 420;
+export const PLAN_H = 525;
 
 /** Top-down layout of each floor, laid out so shared walls match the adjacency above. */
 export const LAYOUT: Record<LocId, Rect> = {
-  storage: { x: 0, y: 0, w: 195, h: 160 },
-  guest: { x: 195, y: 0, w: 195, h: 160 },
-  kitchen: { x: 390, y: 0, w: 210, h: 210 },
-  hall1: { x: 0, y: 160, w: 390, h: 90 },
-  living: { x: 390, y: 210, w: 210, h: 210 },
-  toilet: { x: 0, y: 250, w: 195, h: 170 },
-  bath: { x: 195, y: 250, w: 195, h: 170 },
+  storage: { x: 0, y: 0, w: 195, h: 200 },
+  guest: { x: 195, y: 0, w: 195, h: 200 },
+  kitchen: { x: 390, y: 0, w: 210, h: 262 },
+  hall1: { x: 0, y: 200, w: 390, h: 112 },
+  living: { x: 390, y: 262, w: 210, h: 263 },
+  toilet: { x: 0, y: 312, w: 195, h: 213 },
+  bath: { x: 195, y: 312, w: 195, h: 213 },
 
-  study: { x: 0, y: 0, w: 195, h: 160 },
-  bedA: { x: 195, y: 0, w: 195, h: 160 },
-  hall2: { x: 0, y: 160, w: 390, h: 90 },
-  bedB: { x: 0, y: 250, w: 270, h: 170 },
-  kids: { x: 270, y: 250, w: 165, h: 170 },
-  attic: { x: 435, y: 250, w: 165, h: 170 },
+  study: { x: 0, y: 0, w: 195, h: 200 },
+  bedA: { x: 195, y: 0, w: 195, h: 200 },
+  hall2: { x: 0, y: 200, w: 390, h: 112 },
+  bedB: { x: 0, y: 312, w: 270, h: 213 },
+  kids: { x: 270, y: 312, w: 165, h: 213 },
+  attic: { x: 435, y: 312, w: 165, h: 213 },
 };
 
 /** The open space above the stairs on the 2nd floor (not a room). */
-export const VOID_2F: Rect = { x: 390, y: 0, w: 210, h: 250 };
+export const VOID_2F: Rect = { x: 390, y: 0, w: 210, h: 312 };
 
 export function locsOnFloor(floor: Floor): LocId[] {
   return [...ROOM_IDS.filter((r) => ROOM[r].floor === floor), floor === 1 ? "hall1" : "hall2"];

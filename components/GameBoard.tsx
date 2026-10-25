@@ -125,8 +125,9 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
   return (
     <div className="flex flex-col gap-3">
       <TurnBanner room={room} actorName={actorName} myTurn={myTurn} />
+      {room.phase === "playing" && <FoundPopup room={room} />}
 
-      <div className="grid gap-3 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-3 xl:grid-cols-[1fr_330px]">
         <div className="min-w-0">
           <div ref={boardRef}>
             <HouseMap room={room} targets={targets} selected={selected} onSpot={onSpot} onLoc={onLoc} flashes={flashes} />
@@ -632,7 +633,7 @@ function Legend({ side }: { side: ClientRoom["viewerSide"] }) {
   return (
     <p className="mt-2 px-1 text-xs leading-relaxed text-white/40">
       <span className="text-[#e0b85a]">┅</span> 出入口(人間はここしか通れない。幽霊は壁も抜ける)
-      ・ 探N = {side === "ghost" ? "幽霊" : "人間"}の探索コスト ・ 📜落魂札 🪞手鏡 🔔鈴 💧聖水 🕯️蝋燭 ❔隠しアイテムの部屋 ✨見つけた隠しアイテム
+      ・ <span className="text-gold">●</span>の数字 = {side === "ghost" ? "幽霊" : "人間"}の探索コスト ・ 📜落魂札 🪞手鏡 🔔鈴 💧聖水 🕯️蝋燭 ❔隠しアイテムの部屋 ✨見つけた隠しアイテム
       {side === "human" && " ・ 👣巫女が見た幽霊の探索跡"}
     </p>
   );
@@ -662,6 +663,72 @@ function GameOver({ room, isHost, act }: { room: ClientRoom; isHost: boolean; ac
       ) : (
         <p className="mt-3 text-xs text-white/40">ホストの操作を待っています…</p>
       )}
+    </div>
+  );
+}
+
+/** Pops up what a search (or the flashlight) turned up, one discovery at a time. */
+function FoundPopup({ room }: { room: ClientRoom }) {
+  const newest = room.logs.length ? room.logs[room.logs.length - 1].seq : 0;
+  const [seen, setSeen] = useState(newest);
+  const entry = room.logs.find((l) => l.found && l.seq > seen);
+  useEffect(() => {
+    if (!entry) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSeen(entry.seq);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [entry]);
+  if (!entry?.found) return null;
+  const f = entry.found;
+  if (f.type === "empty") return null;
+  const mine = room.viewerSide === "ghost" ? f.type === "ghost" : f.type === "human";
+  const icon = f.type === "human" ? ITEMS[f.kind].icon : f.fake ? "🎭" : GHOST_ITEMS[f.name].icon;
+  const name = f.type === "human" ? ITEMS[f.kind].name : GHOST_ITEMS[f.name].name;
+  const title =
+    f.type === "ghost" && room.viewerSide === "ghost"
+      ? "幽霊の品を手に入れた!"
+      : f.type === "ghost"
+        ? f.fake
+          ? "偽物の品を見つけた"
+          : "幽霊の品を見つけた!"
+        : mine
+          ? "アイテムを発見!"
+          : "人間の道具を見つけた";
+  const note =
+    f.type === "human"
+      ? mine
+        ? ITEMS[f.kind].desc
+        : "人間の道具は持てない。場所は覚えておける。"
+      : room.viewerSide === "ghost"
+        ? "力が戻ってくる…"
+        : f.fake
+          ? "手品師の仕掛けた偽物。幽霊が拾えば本物だと思い込む。"
+          : "人間は持てない。幽霊に取られる前に見張ろう。";
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4" onClick={() => setSeen(entry.seq)}>
+      <div
+        key={entry.seq}
+        className={`gh-pop w-full max-w-sm rounded-3xl border-2 bg-panel p-6 text-center shadow-2xl ${
+          f.type === "ghost" ? "border-red-400/70" : "border-gold/70"
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className={`text-sm font-black ${f.type === "ghost" ? "text-red-300" : "text-gold"}`}>{title}</p>
+        <div className="my-3 text-7xl">{icon}</div>
+        <p className="text-2xl font-black">
+          {name}
+          {f.type === "ghost" && f.fake && <span className="text-base text-white/60">(偽物)</span>}
+        </p>
+        {entry.spot && <p className="mt-1 text-sm text-white/50">{spotName(entry.spot)}</p>}
+        {!entry.spot && entry.loc && <p className="mt-1 text-sm text-white/50">{locName(entry.loc)}</p>}
+        <p className="mt-3 text-sm leading-relaxed text-white/70">{note}</p>
+        <p className="mt-2 text-xs text-white/40">{entry.text}</p>
+        <button onClick={() => setSeen(entry.seq)} className="mt-4 rounded-full bg-violet px-8 py-2 font-bold text-white hover:brightness-110">
+          OK
+        </button>
+      </div>
     </div>
   );
 }
