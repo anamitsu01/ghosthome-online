@@ -233,7 +233,8 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   assert.deepEqual(room.hunters[0].items.map((i) => i.kind), ["spear", "bell"]);
   assert.equal(room.hidden, null);
   assert.equal(room.turn.hunter, 0, "the turn goes on");
-  assert.equal(room.logs.at(-1)!.found?.type, "human");
+  // (a ghost hiding in the toilet also gets a line, so look for the humans' one)
+  assert.equal(room.logs.find((l) => l.to === "human" && l.found)?.found?.type, "human");
 }
 
 {
