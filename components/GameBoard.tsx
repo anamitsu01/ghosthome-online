@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, ITEMS } from "@/lib/catalog";
 import { FORCED_ROOMS, GHOST_ADJ, HUMAN_ADJ, MOVE_COST, ROOM, SPOT, SPOTS, isHall, locName, spotName, type LocId, type RoomId } from "@/lib/map";
 import type { ClientToServerEvents } from "@/lib/socketEvents";
 import type { Action, ClientHunter, ClientRoom, Item, LogEntry } from "@/lib/types";
 import HouseMap, { ghostColor } from "./HouseMap";
 import GhostSprite from "./GhostSprite";
+import { DICE_RESULT_MS, DiceResult, DiceRow, RollButton } from "./Dice";
 
 type ActFn = <E extends keyof ClientToServerEvents>(
   event: E,
@@ -43,6 +44,18 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
     const timer = setTimeout(() => setSeenSeq(newest), FLASH_MS);
     return () => clearTimeout(timer);
   }, [newest, seenSeq]);
+
+  // Rolls: the big button in the middle of the map, then the result for a moment.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const shownDice = (escape ? escape.dice : turn.dice) ?? [];
+  const rollKey = shownDice.length ? `${turn.round}-${turn.side}-${turn.hunter}-${escape ? "escape" : ""}-${shownDice.join()}` : "";
+  const [seenRoll, setSeenRoll] = useState(rollKey);
+  const showRoll = rollKey !== "" && rollKey !== seenRoll && myTurn;
+  useEffect(() => {
+    if (!showRoll) return;
+    const timer = setTimeout(() => setSeenRoll(rollKey), DICE_RESULT_MS);
+    return () => clearTimeout(timer);
+  }, [showRoll, rollKey]);
 
   async function send(action: Action) {
     const err = await act("game:act", { action });
@@ -115,7 +128,21 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
 
       <div className="grid gap-3 xl:grid-cols-[1fr_340px]">
         <div className="min-w-0">
-          <HouseMap room={room} targets={targets} selected={selected} onSpot={onSpot} onLoc={onLoc} flashes={flashes} />
+          <div ref={boardRef}>
+            <HouseMap room={room} targets={targets} selected={selected} onSpot={onSpot} onLoc={onLoc} flashes={flashes} />
+          </div>
+          {myTurn && room.phase === "playing" && (ghostTurn ? ghostStep === "roll" : turn.step === "roll" && !psychicMode) && (
+            <RollButton
+              anchor={boardRef}
+              diceCount={ghostTurn ? (ghost?.revived ? 3 : 2) : hunterDice(active!)}
+              label={escape ? "逃走のサイコロを振る" : "サイコロを振る"}
+              note={escape ? "見つかった! 振り直して逃げる" : ghostTurn ? undefined : `${CHARACTERS[active!.character].name}の番`}
+              onRoll={() => send({ t: "roll" })}
+            />
+          )}
+          {showRoll && (
+            <DiceResult key={rollKey} anchor={boardRef} dice={shownDice} text={`移動力 ${shownDice.reduce((a, b) => a + b, 0)}!`} />
+          )}
           <Legend side={side} />
         </div>
 
@@ -175,20 +202,12 @@ function TurnBanner({ room, actorName, myTurn }: { room: ClientRoom; actorName: 
       <span className="text-sm text-white/60">{myTurn ? "あなたの番です" : `${actorName} が操作中…`}</span>
       {dice && dice.length > 0 && (
         <span className="ml-auto flex items-center gap-2 text-sm">
-          {dice.map((d, i) => (
-            <Die key={i} n={d} />
-          ))}
+          <DiceRow dice={dice} />
           <span className="text-white/60">残り移動力</span>
           <b className="text-lg text-gold">{budget}</b>
         </span>
       )}
     </div>
-  );
-}
-
-function Die({ n }: { n: number }) {
-  return (
-    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-ink font-black text-background shadow">{n}</span>
   );
 }
 
@@ -229,10 +248,8 @@ function GhostControls({ room, selected, send }: { room: ClientRoom; selected: s
       <div className="space-y-2">
         <p className="text-sm text-white/70">
           {escape ? "見つかった! サイコロを振って逃げよう(探索はできない)。" : `サイコロを${g.revived ? 3 : 2}個振る。`}
+          マップ中央のサイコロをタップ。
         </p>
-        <Btn primary onClick={() => send({ t: "roll" })}>
-          🎲 サイコロを振る
-        </Btn>
       </div>
     );
   }
@@ -327,6 +344,11 @@ function capacity(h: ClientHunter) {
   return h.character === "painter" ? 3 : 2;
 }
 
+function hunterDice(h: ClientHunter) {
+  const kinds = (h.items ?? []).map((i) => i.kind);
+  return 1 + (kinds.includes("redbeads") && kinds.includes("bluebeads") ? 1 : 0) + (h.gamblerNext ? 1 : 0);
+}
+
 function HunterControls({
   room,
   hunter,
@@ -365,10 +387,8 @@ function HunterControls({
         {c.name}({locName(hunter.loc)})
       </p>
       {turn.step === "roll" ? (
-        <div className="flex flex-wrap gap-2">
-          <Btn primary onClick={() => send({ t: "roll" })}>
-            🎲 サイコロを振る
-          </Btn>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-white/60">マップ中央のサイコロをタップ。振る前にアイテムも使える。</span>
           {hunter.character === "psychic" && !hunter.psychicUsed && (
             <Btn onClick={() => setPsychicMode(!psychicMode)}>{psychicMode ? "ワープをやめる" : "🌀 ワープ(1回だけ)"}</Btn>
           )}

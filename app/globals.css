@@ -69,3 +69,89 @@ body {
 .gh-float {
   animation: gh-float 2.4s ease-in-out infinite;
 }
+
+/* Dice tumble when a new roll comes in. */
+@keyframes gh-roll {
+  0% {
+    transform: rotate(-200deg) scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: rotate(15deg) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(0) scale(1);
+  }
+}
+.gh-roll {
+  animation: gh-roll 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes gh-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.gh-pop {
+  animation: gh-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+/* The roll button's dice shake, asking to be rolled. */
+@keyframes gh-wobble {
+  0%,
+  100% {
+    transform: rotate(-8deg) scale(1);
+  }
+  50% {
+    transform: rotate(8deg) scale(1.08);
+  }
+}
+.gh-wobble {
+  display: inline-block;
+  animation: gh-wobble 0.9s ease-in-out infinite;
+}
+
+/* Dice result: pops in, holds, fades out. */
+@keyframes gh-dice-result {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+.gh-dice-result {
+  animation: gh-dice-result 1.7s ease-out both;
+}
+/* The text under the dice appears once they settle. */
+@keyframes gh-reveal {
+  0%,
+  30% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  45%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.gh-reveal {
+  animation: gh-reveal 1.7s ease-out both;
+}
