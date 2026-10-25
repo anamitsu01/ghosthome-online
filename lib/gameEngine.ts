@@ -4,6 +4,7 @@ import {
   GHOST_ITEM_NAMES,
   GHOST_ITEMS,
   GHOST_TOOL_KINDS,
+  GHOST_TOOL_LIMIT,
   GHOST_TOOLS,
   type GhostToolKind,
   HIDDEN_ITEM_KINDS,
@@ -13,6 +14,7 @@ import {
   type ItemKind,
 } from "./catalog";
 import {
+  DOOR_IDS,
   FORCED_ROOMS,
   GHOST_ADJ,
   HUMAN_ADJ,
@@ -21,6 +23,8 @@ import {
   ROOM_IDS,
   SPOT,
   SPOTS,
+  doorId,
+  doorName,
   hearsFrom,
   isHall,
   locName,
@@ -105,6 +109,7 @@ function emptyGame(): Pick<
   | "ghostKnow"
   | "ghostSearchedAll"
   | "ghostCandles"
+  | "doorBlocks"
   | "turn"
   | "escape"
   | "ghostTurns"
@@ -128,6 +133,7 @@ function emptyGame(): Pick<
     ghostKnow: {},
     ghostSearchedAll: [],
     ghostCandles: [],
+    doorBlocks: [],
     turn: { round: 0, side: "ghost", hunter: 0, step: "roll", dice: [], budget: 0, searched: false, resolveSpot: null, pendingEscape: false, path: [] },
     escape: null,
     ghostTurns: 0,
@@ -283,6 +289,7 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
     alive: true,
     items: [],
     psychicUsed: false,
+    mediumUsed: false,
     gamblerNext: false,
     stunned: false,
   }));
@@ -298,7 +305,7 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
   HUMAN_ITEM_KINDS.forEach((kind, i) => (spots[free[i]] = { type: "human", item: newItem(room, kind) }));
   // The ghost's tools: random over what is left.
   const left = shuffle(SPOTS.map((s) => s.id).filter((id) => !spots[id]));
-  GHOST_TOOL_KINDS.forEach((kind, i) => (spots[left[i]] = { type: "tool", kind }));
+  GHOST_TOOL_KINDS.forEach((kind, i) => (spots[left[i]] = { type: "tool", kind, uses: GHOST_TOOLS[kind].uses }));
   room.spots = spots;
   // Hidden item: in a room (not a spot), never the room holding the flashlight.
   const flashSpot = Object.keys(spots).find((id) => {
@@ -319,9 +326,6 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
       const fake = newItem(room, "fake");
       fake.mimic = pick(GHOST_ITEM_NAMES);
       h.items.push(fake);
-    }
-    if (h.character === "medium") {
-      log(room, "human", `霊媒師の力: 幽霊は ${spotName(start.id)} に潜んでいる…`, "good", { spot: start.id });
     }
     if (h.character === "jujutsu") {
       room.humanKnow.hiddenRoom = hiddenRoom;
@@ -554,10 +558,9 @@ function ghostSearch(room: RoomState, spotId: string): void {
   const content = room.spots[spotId];
   room.ghostKnow[spotId] = known(content);
   if (content?.type === "tool") {
-    room.spots[spotId] = null;
-    room.ghostKnow[spotId] = { type: "empty" };
-    g.tools.push({ kind: content.kind, uses: GHOST_TOOLS[content.kind].uses });
-    log(room, "ghost", `${spotName(spotId)}で${GHOST_TOOLS[content.kind].name}を手に入れた!`, "good", { spot: spotId, found: known(content) });
+    log(room, "ghost", `${spotName(spotId)}で${GHOST_TOOLS[content.kind].name}を見つけた`, "good", { spot: spotId, found: known(content) });
+    room.turn.step = "resolve";
+    room.turn.resolveSpot = spotId;
     return;
   }
   if (content?.type !== "ghost") {
@@ -565,6 +568,11 @@ function ghostSearch(room: RoomState, spotId: string): void {
       spot: spotId,
       found: known(content),
     });
+    // An empty spot: the ghost may leave one of its tools there.
+    if (!content && g.tools.length) {
+      room.turn.step = "resolve";
+      room.turn.resolveSpot = spotId;
+    }
     return;
   }
 
@@ -615,11 +623,44 @@ function finishGhostTurn(room: RoomState): void {
   room.ghostTurns += 1;
   if (room.lock && room.ghostTurns >= room.lock.until) room.lock = null;
   room.placed.holy = room.placed.holy.filter((h) => room.ghostTurns < h.until);
+  room.doorBlocks = room.doorBlocks.filter((d) => room.ghostTurns < d.until);
   room.turn = { ...room.turn, side: "human", hunter: -1, pendingEscape: false };
   nextHunter(room);
 }
 
-function applyGhostTool(room: RoomState, kind: GhostToolKind): void {
+/** The ghost takes the tool it found (swapping if `leave` names one of its own) and/or leaves a tool in the spot. */
+function ghostResolve(room: RoomState, take: boolean, leave: string | null): void {
+  const g = room.ghost;
+  const t = room.turn;
+  const spotId = t.resolveSpot!;
+  const content = room.spots[spotId];
+  const leaving = leave ? g.tools.find((x) => x.kind === leave) : undefined;
+  if (leave && !leaving) throw new GameError("その道具は持っていません");
+  if (take) {
+    if (content?.type !== "tool") throw new GameError("取れる道具はありません");
+    if (!leaving && g.tools.length >= GHOST_TOOL_LIMIT) throw new GameError(`道具は${GHOST_TOOL_LIMIT}つまで。置いていく道具を選んでください`);
+    g.tools.push({ kind: content.kind, uses: content.uses });
+    room.spots[spotId] = null;
+    log(room, "ghost", `${GHOST_TOOLS[content.kind].name}を手に入れた`, "good", { spot: spotId });
+  } else if (leaving && room.spots[spotId]) {
+    throw new GameError("そこにはもう物があります");
+  }
+  if (leaving) {
+    g.tools = g.tools.filter((x) => x !== leaving);
+    room.spots[spotId] = { type: "tool", kind: leaving.kind, uses: leaving.uses };
+    log(room, "ghost", `${spotName(spotId)}に${GHOST_TOOLS[leaving.kind].name}を置いた`, "info", { spot: spotId });
+  }
+  room.ghostKnow[spotId] = known(room.spots[spotId]);
+  t.resolveSpot = null;
+  t.step = "hide";
+}
+
+function doorBlocked(room: RoomState, a: LocId, b: LocId): boolean {
+  const id = doorId(a, b);
+  return room.doorBlocks.some((d) => d.door === id && room.ghostTurns < d.until);
+}
+
+function applyGhostTool(room: RoomState, kind: GhostToolKind, door?: string): void {
   const g = room.ghost;
   const tool = g.tools.find((t) => t.kind === kind);
   if (!tool) throw new GameError("その道具は持っていません");
@@ -629,6 +670,14 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind): void {
     if (g.hp >= ghostMaxHp(room)) throw new GameError("体力は満タンです");
     g.hp += 1;
     log(room, "ghost", `🔥 焼け焦げた切れ端を使った。体力が1回復した(体力${g.hp})`, "good");
+  } else if (kind === "jizo") {
+    if (!door || !DOOR_IDS.includes(door)) throw new GameError("塞ぐ扉を選んでください");
+    // Shut through the humans' next round, until this ghost's next turn ends.
+    room.doorBlocks.push({ door, until: room.ghostTurns + 2 });
+    log(room, "all", `🗿 首無し地蔵が ${doorName(door)} の扉を塞いだ! 次の幽霊ターンが終わるまで人間は通れない`, "bad", {
+      loc: door.split("|")[0] as LocId,
+      event: "jizo",
+    });
   } else {
     const targets = aliveHunters(room).filter((h) => !h.stunned);
     if (!targets.length) throw new GameError("呪える人間がいません");
@@ -669,7 +718,11 @@ function ghostAction(room: RoomState, action: Action): void {
       return;
     case "gtool":
       if (t.step !== "roll" && t.step !== "move" && t.step !== "hide") throw new GameError("今は道具を使えません");
-      applyGhostTool(room, action.kind);
+      applyGhostTool(room, action.kind, action.door);
+      return;
+    case "resolve":
+      if (t.step !== "resolve") throw new GameError("決めることはありません");
+      ghostResolve(room, action.take, action.leave);
       return;
     case "end":
       if (t.step !== "move" && t.step !== "hide") throw new GameError("今は終了できません");
@@ -759,6 +812,11 @@ function nextHunter(room: RoomState): void {
   }
 }
 
+/** The イカサマ師 never rolls a 1: 2 to 6, each 1 in 5. */
+function rollFor(h: Hunter, n: number): number[] {
+  return h.character === "cheater" ? Array.from({ length: n }, () => 2 + randInt(5)) : rollDice(n);
+}
+
 function hunterDice(h: Hunter): number {
   return 1 + (has(h, "redbeads") && has(h, "bluebeads") ? 1 : 0) + (h.gamblerNext ? 1 : 0);
 }
@@ -814,12 +872,19 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
   switch (action.t) {
     case "roll": {
       if (t.step !== "roll") throw new GameError("もうサイコロを振りました");
-      const dice = rollDice(hunterDice(h));
+      const dice = rollFor(h, hunterDice(h));
       h.gamblerNext = false;
       t.dice = dice;
       t.budget = sum(dice);
       t.step = "move";
       log(room, "human", `${hunterName(h)}のサイコロ: ${dice.join(" + ")}${dice.length > 1 ? ` = ${sum(dice)}` : ""}`);
+      return;
+    }
+    case "medium": {
+      if (h.character !== "medium") throw new GameError("霊媒師だけの力です");
+      if (h.mediumUsed) throw new GameError("霊視はもう使いました");
+      h.mediumUsed = true;
+      log(room, "human", `🕯 霊媒師の霊視: 幽霊は ${locName(room.ghost.loc)} にいる!`, "good", { loc: room.ghost.loc, event: "medium" });
       return;
     }
     case "psychic": {
@@ -835,6 +900,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
     case "move": {
       if (t.step !== "move") throw new GameError("先にサイコロを振ってください");
       if (!HUMAN_ADJ[h.loc].includes(action.loc)) throw new GameError("出入口でつながった隣の部屋・廊下にしか行けません");
+      if (doorBlocked(room, h.loc, action.loc)) throw new GameError("首無し地蔵に扉を塞がれていて通れません");
       if (MOVE_COST > t.budget) throw new GameError(`移動力が足りません(必要 ${MOVE_COST})`);
       t.budget -= MOVE_COST;
       arriveHunter(room, h, action.loc);
@@ -1146,6 +1212,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
       items: isHuman ? h.items : null,
       itemCount: h.items.length,
       psychicUsed: h.psychicUsed,
+      mediumUsed: h.mediumUsed,
       gamblerNext: isHuman ? h.gamblerNext : false,
       stunned: h.stunned,
     })),
@@ -1166,6 +1233,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
     known,
     humanKnow: isHuman ? room.humanKnow : null,
     ghostCandles: isGhost ? room.ghostCandles : [],
+    doorBlocks: room.doorBlocks.filter((d) => room.ghostTurns < d.until),
     hidden: ended ? room.hidden : null,
     lock: isGhost ? room.lock : null,
     ghostTurns: room.ghostTurns,
@@ -1202,6 +1270,12 @@ export function botAct(room: RoomState, actorId: string): RoomState {
       ["roll", "move", "hide"].includes(t.step) && g.tools.some((x) => x.kind === k) && !room.usedThisRound.includes(`ghost-tool-${k}`);
     if (ready("tablet") && aliveHunters(room).some((h) => !h.stunned) && Math.random() < 0.3) return step({ t: "gtool", kind: "tablet" });
     if (ready("scrap") && g.hp < ghostMaxHp(room)) return step({ t: "gtool", kind: "scrap" });
+    if (ready("jizo") && Math.random() < 0.3) return step({ t: "gtool", kind: "jizo", door: pick(DOOR_IDS) });
+    if (t.step === "resolve") {
+      const c = room.spots[t.resolveSpot!];
+      if (c?.type === "tool") return step({ t: "resolve", take: true, leave: g.tools.length >= GHOST_TOOL_LIMIT ? g.tools[0].kind : null });
+      return step({ t: "resolve", take: false, leave: null });
+    }
     if (t.step === "roll") return step({ t: "roll" });
     if (t.step === "forced") return step({ t: "forced", room: pick(FORCED_ROOMS) });
     if (t.step === "warp") return step({ t: "warp", spot: pick(SPOTS.filter((s) => !holyBlocked(room, s.room))).id });
@@ -1228,7 +1302,8 @@ export function botAct(room: RoomState, actorId: string): RoomState {
   if (!isHall(h.loc) && here.length && (t.budget < MOVE_COST || Math.random() < 0.4)) {
     return step({ t: "search", spot: pick(here).id });
   }
-  if (t.budget >= MOVE_COST) return step({ t: "move", loc: pick(HUMAN_ADJ[h.loc]) });
+  const open = HUMAN_ADJ[h.loc].filter((l) => !doorBlocked(room, h.loc, l));
+  if (t.budget >= MOVE_COST && open.length) return step({ t: "move", loc: pick(open) });
   return step({ t: "end" });
 }
 

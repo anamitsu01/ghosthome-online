@@ -26,7 +26,7 @@ export type SpotContent =
   | null
   | { type: "human"; item: Item }
   | { type: "ghost"; name: GhostItemName; fake: boolean }
-  | { type: "tool"; kind: GhostToolKind };
+  | { type: "tool"; kind: GhostToolKind; uses: number };
 
 /** A spot's content as one side last saw it (the item may have been taken since). */
 export type KnownSpot =
@@ -44,6 +44,8 @@ export interface Hunter {
   alive: boolean;
   items: Item[];
   psychicUsed: boolean;
+  /** 霊媒師: the once-a-game sight has been used. */
+  mediumUsed: boolean;
   /** Gambler's dice used: one extra die on this character's next roll. */
   gamblerNext: boolean;
   /** 地縛霊の石板: this character loses its next turn. */
@@ -76,6 +78,12 @@ export interface Placed {
   /** Blocks the room while ghostTurns < until. */
   holy: { room: RoomId; until: number }[];
   candles: RoomId[];
+}
+
+/** A doorway shut by the 首無し地蔵: humans can't pass while ghostTurns < until. */
+export interface DoorBlock {
+  door: string;
+  until: number;
 }
 
 export type Step =
@@ -126,7 +134,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium";
   /** Damage dealt, for a hit. */
   amount?: number;
 }
@@ -170,6 +178,8 @@ export interface RoomState {
   ghostSearchedAll: string[];
   /** Candle rooms the ghost has walked into (so it knows about them). */
   ghostCandles: RoomId[];
+  /** Doorways shut by the 首無し地蔵 (public). */
+  doorBlocks: DoorBlock[];
   turn: TurnState;
   escape: EscapeState | null;
   /** Normal ghost turns completed. */
@@ -203,6 +213,7 @@ export interface ClientHunter {
   items: Item[] | null;
   itemCount: number;
   psychicUsed: boolean;
+  mediumUsed: boolean;
   gamblerNext: boolean;
   stunned: boolean;
 }
@@ -229,6 +240,7 @@ export interface ClientRoom {
   humanKnow: HumanKnowledge | null;
   /** The ghost's view: candle rooms it knows of. */
   ghostCandles: RoomId[];
+  doorBlocks: DoorBlock[];
   hidden: RoomState["hidden"];
   lock: RoomState["lock"];
   ghostTurns: number;
@@ -244,10 +256,12 @@ export type Action =
   | { t: "move"; loc: LocId }
   | { t: "gmove"; to: string }
   | { t: "search"; spot: string }
+  /** After a search: take what was found (swapping if `leave` is given), and/or leave something in the spot. */
   | { t: "resolve"; take: boolean; leave: string | null }
   | { t: "end" }
   | { t: "warp"; spot: string }
-  | { t: "gtool"; kind: GhostToolKind }
+  | { t: "gtool"; kind: GhostToolKind; door?: string }
+  | { t: "medium" }
   | { t: "forced"; room: RoomId }
   | { t: "psychic"; loc: LocId }
   | { t: "use"; item: string; spot?: string }

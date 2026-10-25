@@ -82,14 +82,17 @@ export const GHOST_ITEMS: Record<GhostItemName, { name: string; icon: string }> 
 export const GHOST_ITEM_NAMES: GhostItemName[] = ["bracelet", "jewel", "knife"];
 
 /** The ghost's own tools: found in hiding spots like everything else, usable only by the ghost. */
-export type GhostToolKind = "scrap" | "tablet";
+export type GhostToolKind = "scrap" | "tablet" | "jizo";
 export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; desc: string; uses: number }> = {
   scrap: { name: "焼け焦げた切れ端", icon: "🔥", desc: "幽霊の体力を1回復する(最大まで)。使い捨て。", uses: 1 },
   tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を1人ランダムに選び、次のターン行動不能にする。3回まで(1ターン1回)。", uses: 3 },
+  jizo: { name: "首無し地蔵", icon: "🗿", desc: "扉を1つ選び、次の幽霊ターンが終わるまで人間が通れないようにする。使い捨て。", uses: 1 },
 };
-export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet"];
+export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo"];
+/** The ghost carries at most this many tools (its revival items don't count). */
+export const GHOST_TOOL_LIMIT = 2;
 
-export type CharacterId = "medium" | "miko" | "scientist" | "painter" | "psychic" | "magician" | "jujutsu";
+export type CharacterId = "medium" | "miko" | "scientist" | "painter" | "psychic" | "magician" | "jujutsu" | "cheater";
 
 export interface CharacterDef {
   id: CharacterId;
@@ -101,12 +104,13 @@ export interface CharacterDef {
 }
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
-  medium: { id: "medium", name: "霊媒師", icon: "霊", color: "#a78bfa", desc: "ゲーム開始時の幽霊の潜伏場所が分かる。" },
+  medium: { id: "medium", name: "霊媒師", icon: "霊", color: "#a78bfa", desc: "1ゲームに1度、自分のターン中(サイコロの前でも後でも)に幽霊のいる部屋が分かる。" },
   miko: { id: "miko", name: "巫女", icon: "巫", color: "#f87171", desc: "部屋に入ると、その部屋で幽霊が探索したことのある潜伏場所が分かる。" },
   scientist: { id: "scientist", name: "科学者", icon: "科", color: "#34d399", desc: "科学者のいる部屋に幽霊が入るとき、移動コスト+2。" },
   painter: { id: "painter", name: "絵描き", icon: "絵", color: "#fbbf24", desc: "アイテムを3つまで持てる。" },
   psychic: { id: "psychic", name: "超能力者", icon: "超", color: "#60a5fa", desc: "1ゲームに1度、サイコロを振る前に好きな部屋・廊下へワープできる。" },
   magician: { id: "magician", name: "手品師", icon: "手", color: "#f472b6", desc: "幽霊アイテムの偽物を1つ持って始まる。探索した場所に置ける。" },
+  cheater: { id: "cheater", name: "イカサマ師", icon: "イ", color: "#94a3b8", desc: "サイコロで1が出ない(2〜6が同じ確率で出る)。" },
   jujutsu: { id: "jujutsu", name: "呪術師", icon: "呪", color: "#fb923c", desc: "隠しアイテムのある部屋が分かる(手に入れるには懐中電灯を持ってその部屋へ)。" },
 };
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];

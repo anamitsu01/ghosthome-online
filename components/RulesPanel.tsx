@@ -53,7 +53,7 @@ export function RulesContent({ className = "" }: { className?: string }) {
         </ul>
       </div>
       <div>
-        <b className={b}>幽霊の道具</b>(潜伏場所にランダム。幽霊が探索で拾い、自分のターンに使う。人間は見つけても持てない)
+        <b className={b}>幽霊の道具</b>(潜伏場所にランダム。幽霊が探索で拾い、自分のターンに使う。持てるのは2つまで(復活の品は別)。人間は見つけても持てない)
         <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
           {GHOST_TOOL_KINDS.map((k) => (
             <li key={k}>

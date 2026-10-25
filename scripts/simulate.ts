@@ -27,7 +27,7 @@ for (let i = 0; i < 200; i++) {
   assert.equal(ghostSpots.length, 3);
   assert.ok(ghostSpots.filter((s) => s.cost === 3).length >= 2);
   assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "human").length, 13);
-  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 2);
+  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 3);
   const flash = SPOTS.find((s) => {
     const c = room.spots[s.id];
     return c?.type === "human" && c.item.kind === "flashlight";
@@ -283,11 +283,14 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   room.ghost.spot = "kitchen-0";
   room.ghost.collected = 1;
   room.ghost.hp = 1;
-  room.spots["kitchen-1"] = { type: "tool", kind: "scrap" };
+  room.spots["kitchen-1"] = { type: "tool", kind: "scrap", uses: 1 };
   act(room, ghostId(room), { t: "roll" });
   room.turn.budget = 6;
   act(room, ghostId(room), { t: "search", spot: "kitchen-1" });
+  assert.equal(room.turn.step, "resolve", "the ghost decides whether to take it");
+  act(room, ghostId(room), { t: "resolve", take: true, leave: null });
   assert.deepEqual(room.ghost.tools, [{ kind: "scrap", uses: 1 }]);
+  assert.equal(room.turn.step, "hide");
   act(room, ghostId(room), { t: "gtool", kind: "scrap" });
   assert.equal(room.ghost.hp, 2);
   assert.deepEqual(room.ghost.tools, []);
@@ -344,6 +347,93 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   const forced = room.logs.at(-1)!;
   assert.equal(forced.event, "forced");
   assert.equal(forced.to, "all");
+}
+
+{
+  // The ghost carries 2 tools at most: a 3rd means swapping one out into the spot.
+  const room = newGame();
+  room.ghost.loc = "kitchen";
+  room.ghost.spot = "kitchen-0";
+  room.ghost.tools = [
+    { kind: "scrap", uses: 1 },
+    { kind: "tablet", uses: 2 },
+  ];
+  room.spots["kitchen-1"] = { type: "tool", kind: "jizo", uses: 1 };
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 6;
+  act(room, ghostId(room), { t: "search", spot: "kitchen-1" });
+  assert.throws(() => act(room, ghostId(room), { t: "resolve", take: true, leave: null }), /2つまで/);
+  act(room, ghostId(room), { t: "resolve", take: true, leave: "tablet" });
+  assert.deepEqual(room.ghost.tools.map((t) => t.kind).sort(), ["jizo", "scrap"]);
+  assert.deepEqual(room.spots["kitchen-1"], { type: "tool", kind: "tablet", uses: 2 }, "uses left travel with the tool");
+}
+
+{
+  // An empty spot: the ghost may leave a tool there (or not).
+  const room = newGame();
+  room.ghost.loc = "kitchen";
+  room.ghost.spot = "kitchen-0";
+  room.ghost.tools = [{ kind: "scrap", uses: 1 }];
+  room.spots["kitchen-1"] = null;
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 6;
+  act(room, ghostId(room), { t: "search", spot: "kitchen-1" });
+  assert.equal(room.turn.step, "resolve");
+  act(room, ghostId(room), { t: "resolve", take: false, leave: "scrap" });
+  assert.deepEqual(room.spots["kitchen-1"], { type: "tool", kind: "scrap", uses: 1 });
+  assert.deepEqual(room.ghost.tools, []);
+}
+
+{
+  // 首無し地蔵: humans can't use that door through their next round; it opens again after the ghost's next turn.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "jizo", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "jizo", door: "hall1|toilet" });
+  assert.deepEqual(room.ghost.tools, []);
+  assert.equal(room.logs.at(-1)!.event, "jizo");
+  toHunters(room);
+  assert.throws(() => act(room, "host", { t: "move", loc: "toilet" }), /塞がれて/);
+  act(room, "host", { t: "move", loc: "living" });
+  while (room.turn.side === "human") act(room, room.hunters[room.turn.hunter].controller, { t: "end" });
+  act(room, ghostId(room), { t: "roll" });
+  act(room, ghostId(room), { t: "end" });
+  room.hunters[room.turn.hunter].loc = "hall1";
+  room.turn.step = "move";
+  room.turn.budget = 2;
+  act(room, room.hunters[room.turn.hunter].controller, { t: "move", loc: "toilet" });
+  assert.equal(room.hunters[room.turn.hunter].loc, "toilet", "the door is open again");
+}
+
+{
+  // 霊媒師: once a game, before or after rolling, the room the ghost is in.
+  let room = createRoom("host", "H", true);
+  room = addBot(room, "host");
+  room = updateSettings(room, "host", { ghost: room.players[1].id, characters: "free" });
+  room = startGame(room, "host");
+  act(room, "host", { t: "pick", slot: 0, character: "medium" });
+  act(room, "host", { t: "pick", slot: 1, character: "cheater" });
+  act(room, "host", { t: "pick", slot: 2, character: "miko" });
+  act(room, "host", { t: "confirmSetup" });
+  room.ghost.loc = "study";
+  room.ghost.spot = "study-1";
+  toHunters(room);
+  act(room, "host", { t: "medium" });
+  const sight = room.logs.at(-1)!;
+  assert.equal(sight.event, "medium");
+  assert.equal(sight.loc, "study");
+  assert.equal(sight.to, "human");
+  assert.throws(() => act(room, "host", { t: "medium" }), /もう使いました/);
+  act(room, "host", { t: "end" });
+  // イカサマ師: never a 1.
+  const rolls: number[] = [];
+  for (let i = 0; i < 400; i++) {
+    room.turn.step = "roll";
+    room.turn.searched = false;
+    act(room, "host", { t: "roll" });
+    rolls.push(...room.turn.dice);
+  }
+  assert.ok(!rolls.includes(1));
+  assert.deepEqual([...new Set(rolls)].sort(), [2, 3, 4, 5, 6]);
 }
 
 {

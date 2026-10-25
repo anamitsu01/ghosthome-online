@@ -8,6 +8,7 @@ import {
   PLAN_W,
   ROOM,
   VOID_2F,
+  doorId,
   doorsOnFloor,
   isHall,
   locsOnFloor,
@@ -32,6 +33,8 @@ export interface MapProps {
   glow?: Set<LocId>;
   /** Controls shown in the open space of the 2nd floor, so they are always next to the map. */
   overlay?: ReactNode;
+  /** Choosing a door (首無し地蔵): doors become clickable. */
+  onDoor?: (door: string) => void;
 }
 
 const SPOT_W = 92;
@@ -129,7 +132,8 @@ const VOID_BOX = {
   height: `${((VOID_2F.h - 10) / (PLAN_H + 12)) * 100}%`,
 };
 
-function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glow, overlay }: MapProps & { floor: Floor }) {
+function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glow, overlay, onDoor }: MapProps & { floor: Floor }) {
+  const shut = new Set(room.doorBlocks.map((d) => d.door));
   const locs = locsOnFloor(floor);
   const placed = room.placed;
   const know = room.humanKnow;
@@ -222,10 +226,18 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
         {doorsOnFloor(floor).map(([a, b]) => {
           const d = doorway(LAYOUT[a], LAYOUT[b]);
           if (!d) return null;
+          const closed = shut.has(doorId(a, b));
+          const mx = (d[0] + d[2]) / 2;
+          const my = (d[1] + d[3]) / 2;
           return (
             <g key={`${a}-${b}`} pointerEvents="none">
               <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke={C.hall} strokeWidth="6" />
-              <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke="#e0b85a" strokeWidth="2" strokeDasharray="4 3" />
+              <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke={closed ? "#ef4444" : "#e0b85a"} strokeWidth={closed ? 5 : 2} strokeDasharray={closed ? undefined : "4 3"} />
+              {closed && (
+                <text x={mx} y={my + 8} textAnchor="middle" fontSize="22">
+                  🗿
+                </text>
+              )}
             </g>
           );
         })}
@@ -315,6 +327,22 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
 
         {/* ghost */}
         {ghost && locs.includes(ghost.loc) && <GhostToken room={room} />}
+
+        {/* choosing a door to shut */}
+        {onDoor &&
+          doorsOnFloor(floor).map(([a, b]) => {
+            const d = doorway(LAYOUT[a], LAYOUT[b]);
+            if (!d) return null;
+            const id = doorId(a, b);
+            return (
+              <g key={`pick-${id}`} onClick={() => onDoor(id)} className="cursor-pointer">
+                <circle cx={(d[0] + d[2]) / 2} cy={(d[1] + d[3]) / 2} r="17" fill="#ef4444" fillOpacity="0.35" stroke="#ffb4b4" strokeWidth="3" className="gh-breathe" />
+                <text x={(d[0] + d[2]) / 2} y={(d[1] + d[3]) / 2 + 7} textAnchor="middle" fontSize="18">
+                  🗿
+                </text>
+              </g>
+            );
+          })}
       </svg>
       </div>
     </div>

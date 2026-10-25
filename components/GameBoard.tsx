@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, GHOST_TOOLS, ITEMS } from "@/lib/catalog";
-import { FORCED_ROOMS, GHOST_ADJ, HUMAN_ADJ, MOVE_COST, ROOM, SPOT, SPOTS, isHall, locName, spotName, type LocId, type RoomId } from "@/lib/map";
+import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, GHOST_TOOL_LIMIT, GHOST_TOOLS, ITEMS, type GhostToolKind } from "@/lib/catalog";
+import { FORCED_ROOMS, GHOST_ADJ, HUMAN_ADJ, MOVE_COST, ROOM, SPOT, SPOTS, doorId, isHall, locName, spotName, type LocId, type RoomId } from "@/lib/map";
 import type { ClientToServerEvents } from "@/lib/socketEvents";
 import type { Action, ClientHunter, ClientRoom, Item, LogEntry } from "@/lib/types";
 import HouseMap, { ghostColor } from "./HouseMap";
@@ -30,11 +30,17 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
 
   // Selection belongs to one turn step.
   const stepKey = `${turn.round}-${turn.side}-${turn.hunter}-${turn.step}-${escape?.step ?? ""}`;
-  const [pickState, setPickState] = useState<{ key: string; spot: string | null; psychic: boolean }>({ key: "", spot: null, psychic: false });
+  const [pickState, setPickState] = useState<{ key: string; spot: string | null; mode: "none" | "psychic" | "door" }>({
+    key: "",
+    spot: null,
+    mode: "none",
+  });
+  const mode = pickState.key === stepKey ? pickState.mode : "none";
   const selected = pickState.key === stepKey ? pickState.spot : null;
-  const psychicMode = pickState.key === stepKey && pickState.psychic;
-  const setSelected = (spot: string | null) => setPickState({ key: stepKey, spot, psychic: false });
-  const setPsychicMode = (psychic: boolean) => setPickState({ key: stepKey, spot: null, psychic });
+  const psychicMode = mode === "psychic";
+  const setSelected = (spot: string | null) => setPickState({ key: stepKey, spot, mode: "none" });
+  const setPsychicMode = (on: boolean) => setPickState({ key: stepKey, spot: null, mode: on ? "psychic" : "none" });
+  const setDoorMode = (on: boolean) => setPickState({ key: stepKey, spot: null, mode: on ? "door" : "none" });
 
   // Flash the places mentioned by log entries newer than what has been shown.
   const newest = room.logs.length ? room.logs[room.logs.length - 1].seq : 0;
@@ -65,6 +71,12 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
     const err = await act("game:act", { action });
     setError(err);
     return err;
+  }
+
+  /** Ghost tools: the 首無し地蔵 first asks for a door on the map. */
+  function onTool(kind: GhostToolKind) {
+    if (kind === "jizo") return setDoorMode(mode !== "door");
+    return send({ t: "gtool", kind });
   }
 
   // ---------- what can be clicked ----------
@@ -103,7 +115,8 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
         return [t, lit];
       }
       if (turn.step === "resolve") return [t, lit];
-      if (turn.step === "move" && budget >= MOVE_COST) HUMAN_ADJ[active.loc].forEach((l) => t.add(l));
+      const shut = new Set(room.doorBlocks.map((d) => d.door));
+      if (turn.step === "move" && budget >= MOVE_COST) HUMAN_ADJ[active.loc].filter((l) => !shut.has(doorId(active.loc, l))).forEach((l) => t.add(l));
       if (!isHall(active.loc)) SPOTS.filter((s) => s.room === active.loc).forEach((s) => t.add(s.id));
     }
     return [t, lit];
@@ -150,6 +163,14 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
               onSpot={onSpot}
               onLoc={onLoc}
               flashes={flashes}
+              onDoor={
+                mode === "door"
+                  ? (door) => {
+                      setDoorMode(false);
+                      send({ t: "gtool", kind: "jizo", door });
+                    }
+                  : undefined
+              }
               overlay={
                 room.phase === "playing" && (
                   <QuickActions
@@ -161,6 +182,8 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
                     error={error}
                     psychicMode={psychicMode}
                     setPsychicMode={setPsychicMode}
+                    doorMode={mode === "door"}
+                    onTool={onTool}
                   />
                 )
               }
@@ -193,10 +216,12 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
               </div>
             )
           )}
-          {myTurn && !ghostTurn && turn.step === "resolve" && turn.resolveSpot && (
-            <ResolveModal room={room} hunter={active!} spotId={turn.resolveSpot} send={send} />
+          {myTurn && !escape && turn.step === "resolve" && turn.resolveSpot && (
+            <ResolveModal key={turn.resolveSpot} room={room} hunter={active} spotId={turn.resolveSpot} send={send} />
           )}
-          {side === "ghost" && ghost && <GhostStatus room={room} canUse={myTurn && !escape && ["roll", "move", "hide"].includes(turn.step)} send={send} />}
+          {side === "ghost" && ghost && (
+            <GhostStatus room={room} canUse={myTurn && !escape && ["roll", "move", "hide"].includes(turn.step)} onTool={onTool} />
+          )}
           {side === "human" && <HuntersPanel room={room} viewerId={viewerId} />}
           {side === "ghost" && <HuntersPublic room={room} />}
           <LogPanel logs={room.logs} />
@@ -295,6 +320,8 @@ function QuickActions({
   error,
   psychicMode,
   setPsychicMode,
+  doorMode,
+  onTool,
 }: {
   room: ClientRoom;
   myTurn: boolean;
@@ -304,6 +331,8 @@ function QuickActions({
   error: string | null;
   psychicMode: boolean;
   setPsychicMode: (v: boolean) => void;
+  doorMode: boolean;
+  onTool: (kind: GhostToolKind) => void;
 }) {
   const turn = room.turn!;
   const escape = room.escape;
@@ -326,6 +355,9 @@ function QuickActions({
 
   const sel = selected ? SPOT[selected] : null;
   const g = room.ghost;
+  const mediumButton = hunter?.character === "medium" && !hunter.mediumUsed && (
+    <QBtn onClick={() => send({ t: "medium" })}>🕯 霊視(1回だけ)</QBtn>
+  );
   let body: React.ReactNode;
   if (ghostTurn && g) {
     if (step === "roll") {
@@ -347,6 +379,8 @@ function QuickActions({
       );
     } else if (step === "warp") {
       body = <p className="text-gold">✨ ワープ先の潜伏場所をクリック</p>;
+    } else if (step === "resolve") {
+      body = <p className="text-gold">探索の結果を選んでください</p>;
     } else {
       const inRoom = sel && sel.room === g.loc;
       body = (
@@ -381,6 +415,7 @@ function QuickActions({
             <QBtn onClick={() => setPsychicMode(!psychicMode)}>{psychicMode ? "ワープをやめる" : "🌀 ワープ"}</QBtn>
           )}
           {psychicMode && <p className="text-gold">ワープ先をクリック</p>}
+          {mediumButton}
           <QBtn onClick={() => send({ t: "end" })}>ターンを終える</QBtn>
         </>
       );
@@ -401,6 +436,7 @@ function QuickActions({
           ) : (
             <p className="text-white/60">光る部屋へ移動。潜伏場所を選ぶと探索</p>
           )}
+          {mediumButton}
           <QBtn onClick={() => send({ t: "end" })}>ターンを終える</QBtn>
         </>
       );
@@ -417,17 +453,18 @@ function QuickActions({
       </p>
       {body}
       {tools.map((t) => (
-        <QBtn key={t.kind} disabled={used(t.kind)} onClick={() => send({ t: "gtool", kind: t.kind })}>
-          {GHOST_TOOLS[t.kind].icon} {GHOST_TOOLS[t.kind].name}
+        <QBtn key={t.kind} disabled={used(t.kind)} onClick={() => onTool(t.kind)}>
+          {t.kind === "jizo" && doorMode ? "地蔵をやめる" : `${GHOST_TOOLS[t.kind].icon} ${GHOST_TOOLS[t.kind].name}`}
           {GHOST_TOOLS[t.kind].uses > 1 && ` 残${t.uses}`}
         </QBtn>
       ))}
+      {doorMode && <p className="text-red-300">🗿 塞ぐ扉をマップでクリック</p>}
       {error && <p className="text-red-400">{error}</p>}
     </div>
   );
 }
 
-function GhostStatus({ room, canUse, send }: { room: ClientRoom; canUse: boolean; send: (a: Action) => Promise<string | null> }) {
+function GhostStatus({ room, canUse, onTool }: { room: ClientRoom; canUse: boolean; onTool: (kind: GhostToolKind) => void }) {
   const g = room.ghost!;
   return (
     <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-panel/70 p-3">
@@ -437,7 +474,7 @@ function GhostStatus({ room, canUse, send }: { room: ClientRoom; canUse: boolean
           幽霊 {g.revived ? <span className="text-red-400">完全復活</span> : <span className="text-white/50">力を失っている</span>}
         </p>
         <p className="text-white/70">
-          体力 <b className="text-ink">{g.hp}</b> ・ 集めた品 {g.collected}
+          体力 <b className="text-ink">{g.hp}</b> ・ 集めた品 {g.collected} ・ 道具 {g.tools.length}/{GHOST_TOOL_LIMIT}
         </p>
         <p className="truncate text-white/60">
           {g.held.length ? g.held.map((n) => `${GHOST_ITEMS[n].icon}${GHOST_ITEMS[n].name}`).join(" ") : "まだ何も持っていない"}
@@ -452,7 +489,7 @@ function GhostStatus({ room, canUse, send }: { room: ClientRoom; canUse: boolean
                   key={t.kind}
                   disabled={!ready}
                   title={GHOST_TOOLS[t.kind].desc}
-                  onClick={() => send({ t: "gtool", kind: t.kind })}
+                  onClick={() => onTool(t.kind)}
                   className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs font-bold enabled:hover:bg-white/10 disabled:opacity-60"
                 >
                   {GHOST_TOOLS[t.kind].icon} {GHOST_TOOLS[t.kind].name}
@@ -634,70 +671,94 @@ function Transfer({ room, hunter, send }: { room: ClientRoom; hunter: ClientHunt
   );
 }
 
-/** What to do with a search's find, as a dialog over the map (behind any "found" popup). */
-function ResolveModal(props: { room: ClientRoom; hunter: ClientHunter; spotId: string; send: (a: Action) => Promise<string | null> }) {
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 px-4">
-      <div className="gh-pop w-full max-w-sm rounded-3xl border-2 border-gold/60 bg-panel p-5 shadow-2xl">
-        <ResolvePanel {...props} />
-      </div>
-    </div>
-  );
+/** One thing in hand that could be left in a spot. */
+interface HandThing {
+  id: string;
+  label: string;
 }
 
-function ResolvePanel({
+/**
+ * After a search, as dialogs over the map (behind any "found" popup):
+ * take what was found? then "leave something here? おく / おかない", and if おく, which one.
+ * Works for both sides: the humans' items, the ghost's tools.
+ */
+function ResolveModal({
   room,
   hunter,
   spotId,
   send,
 }: {
   room: ClientRoom;
-  hunter: ClientHunter;
+  hunter: ClientHunter | null;
   spotId: string;
   send: (a: Action) => Promise<string | null>;
 }) {
   const k = room.known[spotId];
-  const items = hunter.items ?? [];
-  const full = items.length >= capacity(hunter);
-  const found = k?.type === "human" ? ITEMS[k.kind] : null;
+  const ghostSide = !hunter;
+  const hand: HandThing[] = ghostSide
+    ? (room.ghost?.tools ?? []).map((t) => ({ id: t.kind, label: `${GHOST_TOOLS[t.kind].icon} ${GHOST_TOOLS[t.kind].name}` }))
+    : (hunter.items ?? []).map((i) => ({ id: i.id, label: `${ITEMS[i.kind].icon} ${ITEMS[i.kind].name}` }));
+  const limit = ghostSide ? GHOST_TOOL_LIMIT : capacity(hunter);
+  const found =
+    ghostSide && k?.type === "tool"
+      ? { icon: GHOST_TOOLS[k.kind].icon, name: GHOST_TOOLS[k.kind].name }
+      : !ghostSide && k?.type === "human"
+        ? { icon: ITEMS[k.kind].icon, name: ITEMS[k.kind].name }
+        : null;
+  const [stage, setStage] = useState<"take" | "ask" | "pick" | "swap">(found ? "take" : "ask");
+  const [taking, setTaking] = useState(false);
+  const resolve = (take: boolean, leave: string | null) => send({ t: "resolve", take, leave });
+
+  function take() {
+    if (hand.length >= limit) return setStage("swap");
+    if (!hand.length) return resolve(true, null);
+    setTaking(true);
+    setStage("ask");
+  }
+
+  let title: string;
+  let body: React.ReactNode;
+  if (stage === "take" && found) {
+    title = `${found.icon} ${found.name}を見つけた`;
+    body = (
+      <>
+        <Btn primary onClick={take}>
+          手に入れる
+        </Btn>
+        <Btn onClick={() => resolve(false, null)}>取らない</Btn>
+      </>
+    );
+  } else if (stage === "ask") {
+    title = ghostSide ? "持っている道具をここに置く?" : "持ち物をここに置く?";
+    body = (
+      <>
+        <Btn primary onClick={() => setStage("pick")}>
+          おく
+        </Btn>
+        <Btn onClick={() => resolve(taking, null)}>おかない</Btn>
+      </>
+    );
+  } else {
+    const swap = stage === "swap";
+    title = swap ? `持てるのは${limit}つまで。代わりにどれを置く?` : "どれを置く?";
+    body = (
+      <>
+        {hand.map((h) => (
+          <Btn key={h.id} primary onClick={() => resolve(swap || taking, h.id)}>
+            {h.label}
+          </Btn>
+        ))}
+        <Btn onClick={() => setStage(found && (swap || !taking) ? "take" : "ask")}>もどる</Btn>
+      </>
+    );
+  }
   return (
-    <div className="space-y-2 text-sm">
-      <p className="font-bold">{spotName(spotId)} の探索結果</p>
-      {found ? (
-        <>
-          <p>
-            {found.icon} <b>{found.name}</b> を見つけた
-          </p>
-          <p className="text-xs text-white/50">{found.desc}</p>
-          <div className="flex flex-wrap gap-2">
-            {!full && (
-              <Btn primary onClick={() => send({ t: "resolve", take: true, leave: null })}>
-                手に入れる
-              </Btn>
-            )}
-            {items.map((i) => (
-              <Btn key={i.id} onClick={() => send({ t: "resolve", take: true, leave: i.id })}>
-                {ITEMS[i.kind].icon}{ITEMS[i.kind].name}と交換
-              </Btn>
-            ))}
-            <Btn onClick={() => send({ t: "resolve", take: false, leave: null })}>取らない</Btn>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="text-white/70">何もなかった。持ち物をここに置いていくこともできる。</p>
-          <div className="flex flex-wrap gap-2">
-            {items.map((i) => (
-              <Btn key={i.id} onClick={() => send({ t: "resolve", take: false, leave: i.id })}>
-                {ITEMS[i.kind].icon}{ITEMS[i.kind].name}を置く
-              </Btn>
-            ))}
-            <Btn primary onClick={() => send({ t: "resolve", take: false, leave: null })}>
-              何も置かない
-            </Btn>
-          </div>
-        </>
-      )}
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 px-4">
+      <div className="gh-pop w-full max-w-sm rounded-3xl border-2 border-gold/60 bg-panel p-5 text-center shadow-2xl">
+        <p className="text-xs text-white/50">{spotName(spotId)} の探索結果</p>
+        <p className="mt-1 mb-4 text-lg font-black">{title}</p>
+        <div className="flex flex-wrap justify-center gap-2">{body}</div>
+      </div>
     </div>
   );
 }
@@ -847,6 +908,30 @@ function FoundPopup({ room }: { room: ClientRoom }) {
         title={isGhost ? "人間たちを引きずり込んだ!" : "幽霊に引きずり込まれた!"}
         place={place}
         note={isGhost ? "2つ目の品の力で、人間全員をこの部屋へ集めた。" : "幽霊が2つ目の品を手に入れた。人間は全員この部屋へ強制移動。"}
+        tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "medium") {
+    return (
+      <InfoPopup
+        icon="🕯"
+        title="霊媒師の霊視"
+        place={place}
+        note="幽霊は今この部屋のどこかにいる。"
+        tone="good"
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "jizo") {
+    return (
+      <InfoPopup
+        icon="🗿"
+        title="首無し地蔵が扉を塞いだ!"
+        place={entry.text.match(/首無し地蔵が (.+) の扉/)?.[1]}
+        note={isGhost ? "次の幽霊ターンが終わるまで、人間はこの扉を通れない。" : "次の幽霊ターンが終わるまで、この扉は通れない。"}
         tone={isGhost ? "good" : "bad"}
         onClose={close}
       />

@@ -176,3 +176,16 @@ export function locsOnFloor(floor: Floor): LocId[] {
 export function doorsOnFloor(floor: Floor): Edge[] {
   return DOORS.filter(([a, b]) => !(isHall(a) && isHall(b)) && floorOf(a) === floor);
 }
+
+/** A doorway's id, the same whichever side it is named from. */
+export function doorId(a: LocId, b: LocId): string {
+  return [a, b].sort().join("|");
+}
+
+/** Every doorway the 首無し地蔵 can shut (the stairs are not a door). */
+export const DOOR_IDS: string[] = DOORS.filter(([a, b]) => !(isHall(a) && isHall(b))).map(([a, b]) => doorId(a, b));
+
+export function doorName(id: string): string {
+  const [a, b] = id.split("|") as LocId[];
+  return `${locName(a)}↔${locName(b)}`;
+}
