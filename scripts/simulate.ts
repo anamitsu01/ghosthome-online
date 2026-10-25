@@ -235,6 +235,25 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
+  // A bell rings for both sides; 検知鬼くん tells both sides where the ghost is.
+  const room = newGame();
+  room.ghost.loc = "hall1";
+  room.ghost.spot = null;
+  room.placed.bells.push({ room: "toilet", item: { id: "bl", kind: "bell" } });
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 4;
+  act(room, ghostId(room), { t: "gmove", to: "toilet-0" });
+  const bells = room.logs.filter((l) => l.event === "bell").map((l) => l.to);
+  assert.deepEqual(bells.sort(), ["ghost", "human"]);
+  act(room, ghostId(room), { t: "end" });
+  room.hunters[0].items = [{ id: "k", kind: "kenchi", uses: 3 }];
+  act(room, "host", { t: "use", item: "k" });
+  const kenchi = room.logs.filter((l) => l.event === "kenchi");
+  assert.deepEqual(kenchi.map((l) => l.to).sort(), ["ghost", "human"]);
+  assert.ok(kenchi.every((l) => l.loc === "toilet"));
+}
+
+{
   // Hidden view: humans don't see where the ghost is, the ghost doesn't see human items.
   const room = newGame();
   const human = viewFor(room, "host");

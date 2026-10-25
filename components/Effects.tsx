@@ -168,3 +168,39 @@ export function NoisePopup({ spot, loc, onClose }: { spot?: string; loc?: LocId;
     </div>
   );
 }
+
+/** A plain announcement: a big icon, a title, where, and a line of explanation. */
+export function InfoPopup({
+  icon,
+  title,
+  place,
+  note,
+  tone,
+  onClose,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  place?: string;
+  note?: string;
+  tone: "good" | "bad" | "dull";
+  onClose: () => void;
+}) {
+  const color = {
+    good: "border-emerald-400/80 shadow-[0_0_50px_rgba(52,211,153,0.3)] text-emerald-300",
+    bad: "border-red-500/80 shadow-[0_0_50px_rgba(227,33,43,0.35)] text-red-300",
+    dull: "border-white/25 text-white/70",
+  }[tone];
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className={`gh-pop w-full max-w-sm rounded-3xl border-2 bg-panel p-6 text-center shadow-2xl ${color}`} onClick={(e) => e.stopPropagation()}>
+        <div className="my-2 flex justify-center text-7xl">{icon}</div>
+        <p className="text-2xl font-black text-ink">{title}</p>
+        {place && <p className="mt-2 text-lg font-bold text-ink/90">{place}</p>}
+        {note && <p className="mt-3 text-sm leading-relaxed text-white/70">{note}</p>}
+        <button onClick={onClose} className="mt-5 rounded-full bg-violet px-8 py-2 font-bold text-white hover:brightness-110">
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}

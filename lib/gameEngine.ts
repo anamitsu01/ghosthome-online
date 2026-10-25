@@ -436,7 +436,9 @@ function ghostArrive(room: RoomState, loc: LocId, spot: string | null, canKill: 
 
   if (entered && !isHall(loc)) {
     for (const b of room.placed.bells) {
-      if (b.room === loc) log(room, "human", `🔔 ${ROOM[loc].name}の鈴が鳴った!`, "warn", { loc });
+      if (b.room !== loc) continue;
+      log(room, "human", `🔔 ${ROOM[loc].name}の鈴が鳴った!`, "warn", { loc, event: "bell" });
+      log(room, "ghost", `🔔 ${ROOM[loc].name}に入ったら鈴が鳴った! 人間に居場所を知られた`, "bad", { loc, event: "bell" });
     }
   }
   if (spot) {
@@ -529,7 +531,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   if (content?.type !== "ghost") {
     log(room, "ghost", `${spotName(spotId)}を探索: ${content ? `${ITEMS[content.item.kind].name}(人間の道具)` : "何もない"}`, "info", {
       spot: spotId,
-      found: content ? known(content) : undefined,
+      found: known(content),
     });
     return;
   }
@@ -821,7 +823,8 @@ function hunterSearch(room: RoomState, h: Hunter, spotId: string): void {
   room.humanKnow.spots[spotId] = known(content);
   log(room, "human", `${hunterName(h)}が${spotName(spotId)}を探索: ${describe(content)}`, "info", {
     spot: spotId,
-    found: content ? known(content) : undefined,
+    // An empty spot with the ghost in it is not "nothing there": that gets its own popup.
+    found: content || room.ghost.spot !== spotId ? known(content) : undefined,
   });
   if (room.ghost.loc === spot.room) {
     log(room, "ghost", `${hunterName(h)}が${spotName(spotId)}を探索した: ${describe(content)}`, "warn", { spot: spotId });
@@ -953,9 +956,15 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string):
         "human",
         `👹 検知鬼くん: 幽霊は${same ? spotName(g.spot!) : locName(g.loc)}にいる!(残り${item.uses ?? 0}回)`,
         "good",
-        same ? { spot: g.spot! } : { loc: g.loc }
+        same ? { spot: g.spot!, event: "kenchi" } : { loc: g.loc, event: "kenchi" }
       );
-      log(room, "ghost", `👹 ${hunterName(h)}が検知鬼くんを使った! 居場所を知られた`, "bad");
+      log(
+        room,
+        "ghost",
+        `👹 ${hunterName(h)}が検知鬼くんを使った! ${same ? spotName(g.spot!) : locName(g.loc)}にいることを知られた`,
+        "bad",
+        same ? { spot: g.spot!, event: "kenchi" } : { loc: g.loc, event: "kenchi" }
+      );
       return;
     }
     case "crystal":

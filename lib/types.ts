@@ -113,8 +113,8 @@ export interface LogEntry {
   spot?: string;
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
-  /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard. */
-  event?: "revive" | "hit" | "noise";
+  /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell";
   /** Damage dealt, for a hit. */
   amount?: number;
 }

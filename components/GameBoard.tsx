@@ -8,7 +8,7 @@ import type { Action, ClientHunter, ClientRoom, Item, LogEntry } from "@/lib/typ
 import HouseMap, { ghostColor } from "./HouseMap";
 import GhostSprite from "./GhostSprite";
 import { DICE_RESULT_MS, DiceResult, DiceRow, RollButton } from "./Dice";
-import { HitPopup, NoisePopup, RevivePopup, VictoryBanner } from "./Effects";
+import { HitPopup, InfoPopup, NoisePopup, RevivePopup, VictoryBanner } from "./Effects";
 
 type ActFn = <E extends keyof ClientToServerEvents>(
   event: E,
@@ -634,7 +634,7 @@ function Legend({ side }: { side: ClientRoom["viewerSide"] }) {
   return (
     <p className="mt-2 px-1 text-xs leading-relaxed text-white/40">
       <span className="text-[#e0b85a]">┅</span> 出入口(人間はここしか通れない。幽霊は壁も抜ける)
-      ・ <span className="text-gold">●</span>の数字 = {side === "ghost" ? "幽霊" : "人間"}の探索コスト ・ 📜落魂札 🪞手鏡 🔔鈴 💧聖水 🕯️蝋燭 ❔隠しアイテムの部屋 ✨見つけた隠しアイテム
+      ・ <span className="text-gold">●</span>の数字 = {side === "ghost" ? "幽霊" : "人間"}の探索コスト ・ <span className="font-black text-red-500">✕</span>何もなかった ・ 📜落魂札 🪞手鏡 🔔鈴 💧聖水 🕯️蝋燭 ❔隠しアイテムの部屋 ✨見つけた隠しアイテム
       {side === "human" && " ・ 👣巫女が見た幽霊の探索跡"}
     </p>
   );
@@ -685,9 +685,37 @@ function FoundPopup({ room }: { room: ClientRoom }) {
   if (entry?.event === "revive") return <RevivePopup room={room} spot={entry.spot} onClose={close} />;
   if (entry?.event === "hit") return <HitPopup room={room} spot={entry.spot} amount={entry.amount ?? 1} text={entry.text} onClose={close} />;
   if (entry?.event === "noise") return <NoisePopup spot={entry.spot} loc={entry.loc} onClose={close} />;
+  const place = entry?.spot ? spotName(entry.spot) : entry?.loc ? locName(entry.loc) : undefined;
+  const isGhost = room.viewerSide === "ghost";
+  if (entry?.event === "kenchi") {
+    return (
+      <InfoPopup
+        icon="👹"
+        title={isGhost ? "検知鬼くんに見つかった!" : "検知鬼くんが幽霊を見つけた!"}
+        place={place}
+        note={isGhost ? "人間に居場所を知られた。" : entry.spot ? "同じ部屋にいるので潜伏場所まで分かった。" : "幽霊はこの部屋のどこかにいる。"}
+        tone={isGhost ? "bad" : "good"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "bell") {
+    return (
+      <InfoPopup
+        icon={<span className="gh-ring inline-block">🔔</span>}
+        title="鈴が鳴った!"
+        place={place}
+        note={isGhost ? "人間が仕掛けた聖なる鈴だ。この部屋に入ったことを知られた。" : "幽霊がこの部屋に入った!"}
+        tone={isGhost ? "bad" : "good"}
+        onClose={close}
+      />
+    );
+  }
   if (!entry?.found) return null;
   const f = entry.found;
-  if (f.type === "empty") return null;
+  if (f.type === "empty") {
+    return <InfoPopup icon="❌" title="残念! 何もなかった!" place={place} tone="dull" onClose={close} />;
+  }
   const mine = room.viewerSide === "ghost" ? f.type === "ghost" : f.type === "human";
   const icon = f.type === "human" ? ITEMS[f.kind].icon : f.fake ? "🎭" : GHOST_ITEMS[f.name].icon;
   const name = f.type === "human" ? ITEMS[f.kind].name : GHOST_ITEMS[f.name].name;

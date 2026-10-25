@@ -69,7 +69,7 @@ function doorway(a: Rect, b: Rect): [number, number, number, number] | null {
 
 function knownIcon(k: KnownSpot | undefined): string | null {
   if (!k) return null;
-  if (k.type === "empty") return "・";
+  if (k.type === "empty") return null;
   if (k.type === "human") return ITEMS[k.kind].icon;
   return k.fake ? "🎭" : GHOST_ITEMS[k.name].icon;
 }
@@ -241,6 +241,11 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                   <text x={rect.x + 15} y={rect.y + rect.h - 9.5} textAnchor="middle" fontSize="16" fontWeight="800" fill="#1d1b3a">
                     {room.viewerSide === "ghost" ? s.cost : humanCost}
                   </text>
+                  {room.known[s.id]?.type === "empty" && (
+                    <text x={rect.x + rect.w / 2 + 4} y={rect.y + rect.h - 7} textAnchor="middle" fontSize="22" fontWeight="900" fill="#ef4444">
+                      ✕
+                    </text>
+                  )}
                   {icon && (
                     <text x={rect.x + rect.w / 2 + 4} y={rect.y + rect.h - 8} textAnchor="middle" fontSize="19">
                       {icon}
