@@ -3,6 +3,9 @@ import {
   CHARACTERS,
   GHOST_ITEM_NAMES,
   GHOST_ITEMS,
+  GHOST_TOOL_KINDS,
+  GHOST_TOOLS,
+  type GhostToolKind,
   HIDDEN_ITEM_KINDS,
   HUMAN_ITEM_KINDS,
   ITEMS,
@@ -116,7 +119,7 @@ function emptyGame(): Pick<
     ghostPlayer: "",
     picks: [null, null, null],
     hunters: [],
-    ghost: { loc: "hall1", spot: null, hp: 1, collected: 0, real: 0, revived: false, held: [], startSpot: "" },
+    ghost: { loc: "hall1", spot: null, hp: 1, collected: 0, real: 0, revived: false, held: [], tools: [], startSpot: "" },
     spots: {},
     hidden: null,
     placed: { bells: [], ofuda: [], mirrors: [], holy: [], candles: [] },
@@ -279,6 +282,7 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
     items: [],
     psychicUsed: false,
     gamblerNext: false,
+    stunned: false,
   }));
 
   // Ghost items: at least 2 of the 3 behind cost-3 spots, no other evening out.
@@ -290,6 +294,9 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
   // Human items: completely random over the remaining spots.
   const free = shuffle(SPOTS.map((s) => s.id).filter((id) => !spots[id]));
   HUMAN_ITEM_KINDS.forEach((kind, i) => (spots[free[i]] = { type: "human", item: newItem(room, kind) }));
+  // The ghost's tools: random over what is left.
+  const left = shuffle(SPOTS.map((s) => s.id).filter((id) => !spots[id]));
+  GHOST_TOOL_KINDS.forEach((kind, i) => (spots[left[i]] = { type: "tool", kind }));
   room.spots = spots;
   // Hidden item: in a room (not a spot), never the room holding the flashlight.
   const flashSpot = Object.keys(spots).find((id) => {
@@ -377,6 +384,12 @@ function ghostDice(room: RoomState): number {
   return room.ghost.revived ? 3 : 2;
 }
 
+/** Hit points the ghost can have now: 1, +1 from the first item, +1 for the full revival. */
+function ghostMaxHp(room: RoomState): number {
+  const g = room.ghost;
+  return 1 + (g.collected >= 1 ? 1 : 0) + (g.revived ? 1 : 0);
+}
+
 function startGhostTurn(room: RoomState): void {
   room.turn = {
     round: room.turn.round + 1,
@@ -423,6 +436,8 @@ export function ghostStepCost(room: RoomState, to: string, afterSearch: boolean)
   if (!isHall(target.loc) && aliveHunters(room).some((h) => h.character === "scientist" && h.loc === target.loc)) {
     cost += 2;
   }
+  // A candle makes leaving its room harder.
+  if (!isHall(g.loc) && room.placed.candles.includes(g.loc)) cost += 2;
   return { ...target, cost };
 }
 
@@ -510,7 +525,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   const spot = SPOT[spotId];
   if (room.turn.searched) throw new GameError("探索は1ターンに1回です");
   if (!spot || spot.room !== g.loc) throw new GameError("今いる部屋の潜伏場所しか探索できません");
-  const cost = spot.cost + (room.placed.candles.includes(spot.room) ? 2 : 0);
+  const cost = spot.cost;
   if (cost > room.turn.budget) throw new GameError(`移動力が足りません(探索コスト ${cost})`);
   room.turn.budget -= cost;
   room.turn.searched = true;
@@ -528,6 +543,13 @@ function ghostSearch(room: RoomState, spotId: string): void {
 
   const content = room.spots[spotId];
   room.ghostKnow[spotId] = known(content);
+  if (content?.type === "tool") {
+    room.spots[spotId] = null;
+    room.ghostKnow[spotId] = { type: "empty" };
+    g.tools.push(content.kind);
+    log(room, "ghost", `${spotName(spotId)}で${GHOST_TOOLS[content.kind].name}を手に入れた!`, "good", { spot: spotId, found: known(content) });
+    return;
+  }
   if (content?.type !== "ghost") {
     log(room, "ghost", `${spotName(spotId)}を探索: ${content ? `${ITEMS[content.item.kind].name}(人間の道具)` : "何もない"}`, "info", {
       spot: spotId,
@@ -565,7 +587,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
 function ghostForced(room: RoomState, target: RoomId): void {
   if (!FORCED_ROOMS.includes(target)) throw new GameError("屋根裏部屋かバスルームを選びます");
   for (const h of aliveHunters(room)) arriveHunter(room, h, target);
-  log(room, "all", `🌀 人間たちは全員${ROOM[target].name}へ引きずり込まれた!`, "bad", { loc: target });
+  log(room, "all", `🌀 人間たちは全員${ROOM[target].name}へ引きずり込まれた!`, "bad", { loc: target, event: "forced" });
   room.turn.step = "warp";
 }
 
@@ -583,8 +605,25 @@ function finishGhostTurn(room: RoomState): void {
   room.ghostTurns += 1;
   if (room.lock && room.ghostTurns >= room.lock.until) room.lock = null;
   room.placed.holy = room.placed.holy.filter((h) => room.ghostTurns < h.until);
-  const first = aliveHunters(room)[0];
-  startHunterTurn(room, first.slot);
+  room.turn = { ...room.turn, side: "human", hunter: -1, pendingEscape: false };
+  nextHunter(room);
+}
+
+function applyGhostTool(room: RoomState, kind: GhostToolKind): void {
+  const g = room.ghost;
+  if (!g.tools.includes(kind)) throw new GameError("その道具は持っていません");
+  if (kind === "scrap") {
+    if (g.hp >= ghostMaxHp(room)) throw new GameError("体力は満タンです");
+    g.hp += 1;
+    log(room, "ghost", `🔥 焼け焦げた切れ端を使った。体力が1回復した(体力${g.hp})`, "good");
+  } else {
+    const targets = aliveHunters(room).filter((h) => !h.stunned);
+    if (!targets.length) throw new GameError("呪える人間がいません");
+    const h = pick(targets);
+    h.stunned = true;
+    log(room, "all", `🪦 地縛霊の石板の呪い! ${hunterName(h)}は次のターン動けない`, "bad", { loc: h.loc, event: "curse" });
+  }
+  g.tools.splice(g.tools.indexOf(kind), 1);
 }
 
 function ghostAction(room: RoomState, action: Action): void {
@@ -609,6 +648,10 @@ function ghostAction(room: RoomState, action: Action): void {
     case "warp":
       if (t.step !== "warp") throw new GameError("今はワープできません");
       ghostWarp(room, action.spot);
+      return;
+    case "gtool":
+      if (t.step !== "roll" && t.step !== "move" && t.step !== "hide") throw new GameError("今は道具を使えません");
+      applyGhostTool(room, action.kind);
       return;
     case "end":
       if (t.step !== "move" && t.step !== "hide") throw new GameError("今は終了できません");
@@ -686,9 +729,16 @@ function nextHunter(room: RoomState): void {
     startEscape(room, "next");
     return;
   }
-  const next = aliveHunters(room).find((h) => h.slot > room.turn.hunter);
-  if (next) startHunterTurn(room, next.slot);
-  else startGhostTurn(room);
+  // A cursed hunter loses this turn (and only this one).
+  let after = room.turn.hunter;
+  for (;;) {
+    const next = aliveHunters(room).find((h) => h.slot > after);
+    if (!next) return startGhostTurn(room);
+    if (!next.stunned) return startHunterTurn(room, next.slot);
+    next.stunned = false;
+    log(room, "all", `🪦 ${hunterName(next)}は呪いで動けない…(ターンを飛ばす)`, "bad", { loc: next.loc });
+    after = next.slot;
+  }
 }
 
 function hunterDice(h: Hunter): number {
@@ -698,12 +748,14 @@ function hunterDice(h: Hunter): number {
 function known(content: SpotContent): KnownSpot {
   if (!content) return { type: "empty" };
   if (content.type === "human") return { type: "human", kind: content.item.kind };
+  if (content.type === "tool") return { type: "tool", kind: content.kind };
   return { type: "ghost", name: content.name, fake: content.fake };
 }
 
 function describe(content: SpotContent): string {
   if (!content) return "何もない";
   if (content.type === "human") return ITEMS[content.item.kind].name;
+  if (content.type === "tool") return `${GHOST_TOOLS[content.kind].name}(幽霊の道具)`;
   return content.fake ? `${GHOST_ITEMS[content.name].name}(偽物)` : `${GHOST_ITEMS[content.name].name}(幽霊の品)`;
 }
 
@@ -827,6 +879,7 @@ function hunterSearch(room: RoomState, h: Hunter, spotId: string): void {
     found: content || room.ghost.spot !== spotId ? known(content) : undefined,
   });
   if (room.ghost.loc === spot.room) {
+    room.ghostKnow[spotId] = known(content);
     log(room, "ghost", `${hunterName(h)}が${spotName(spotId)}を探索した: ${describe(content)}`, "warn", { spot: spotId });
   }
 
@@ -881,6 +934,8 @@ function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: strin
     }
   }
   room.humanKnow.spots[spotId] = known(room.spots[spotId]);
+  // What was taken or left is seen by a ghost hiding in that room.
+  if (room.ghost.loc === SPOT[spotId].room) room.ghostKnow[spotId] = known(room.spots[spotId]);
   t.step = "move";
   t.resolveSpot = null;
   nextHunter(room);
@@ -1074,6 +1129,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
       itemCount: h.items.length,
       psychicUsed: h.psychicUsed,
       gamblerNext: isHuman ? h.gamblerNext : false,
+      stunned: h.stunned,
     })),
     ghost: showGhost ? { ...room.ghost, visible: true, held: isGhost ? room.ghost.held : [] } : null,
     turn: playing
@@ -1122,13 +1178,15 @@ export function botAct(room: RoomState, actorId: string): RoomState {
   }
   const t = room.turn;
   if (t.side === "ghost") {
+    const g = room.ghost;
+    if (g.tools.includes("tablet") && Math.random() < 0.3) return step({ t: "gtool", kind: "tablet" });
+    if (g.tools.includes("scrap") && g.hp < ghostMaxHp(room)) return step({ t: "gtool", kind: "scrap" });
     if (t.step === "roll") return step({ t: "roll" });
     if (t.step === "forced") return step({ t: "forced", room: pick(FORCED_ROOMS) });
     if (t.step === "warp") return step({ t: "warp", spot: pick(SPOTS.filter((s) => !holyBlocked(room, s.room))).id });
     if (t.step === "move") {
       const here = SPOTS.filter((s) => s.room === room.ghost.loc);
-      const candleCost = (s: (typeof SPOTS)[number]) => s.cost + (room.placed.candles.includes(s.room) ? 2 : 0);
-      const affordable = here.filter((s) => candleCost(s) <= t.budget);
+      const affordable = here.filter((s) => s.cost <= t.budget);
       if (affordable.length && Math.random() < 0.55) return step({ t: "search", spot: pick(affordable).id });
       return ghostWander(room, t.budget, true) ?? step({ t: "end" });
     }

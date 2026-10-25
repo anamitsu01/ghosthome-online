@@ -1,4 +1,4 @@
-import type { CharacterId, GhostItemName, ItemKind } from "./catalog";
+import type { CharacterId, GhostItemName, GhostToolKind, ItemKind } from "./catalog";
 import type { LocId, RoomId } from "./map";
 
 export type Side = "ghost" | "human";
@@ -22,10 +22,18 @@ export interface Item {
 }
 
 /** What lies in a hiding spot. Traps placed by humans are tracked separately. */
-export type SpotContent = null | { type: "human"; item: Item } | { type: "ghost"; name: GhostItemName; fake: boolean };
+export type SpotContent =
+  | null
+  | { type: "human"; item: Item }
+  | { type: "ghost"; name: GhostItemName; fake: boolean }
+  | { type: "tool"; kind: GhostToolKind };
 
 /** A spot's content as one side last saw it (the item may have been taken since). */
-export type KnownSpot = { type: "empty" } | { type: "human"; kind: ItemKind } | { type: "ghost"; name: GhostItemName; fake: boolean };
+export type KnownSpot =
+  | { type: "empty" }
+  | { type: "human"; kind: ItemKind }
+  | { type: "ghost"; name: GhostItemName; fake: boolean }
+  | { type: "tool"; kind: GhostToolKind };
 
 export interface Hunter {
   slot: number;
@@ -38,6 +46,8 @@ export interface Hunter {
   psychicUsed: boolean;
   /** Gambler's dice used: one extra die on this character's next roll. */
   gamblerNext: boolean;
+  /** 地縛霊の石板: this character loses its next turn. */
+  stunned: boolean;
 }
 
 export interface GhostState {
@@ -53,6 +63,8 @@ export interface GhostState {
   revived: boolean;
   /** What the ghost thinks it holds (fakes look real to it). */
   held: GhostItemName[];
+  /** Ghost tools in hand. */
+  tools: GhostToolKind[];
   startSpot: string;
 }
 
@@ -114,7 +126,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse";
   /** Damage dealt, for a hit. */
   amount?: number;
 }
@@ -190,6 +202,7 @@ export interface ClientHunter {
   itemCount: number;
   psychicUsed: boolean;
   gamblerNext: boolean;
+  stunned: boolean;
 }
 
 export interface ClientRoom {
@@ -230,6 +243,7 @@ export type Action =
   | { t: "resolve"; take: boolean; leave: string | null }
   | { t: "end" }
   | { t: "warp"; spot: string }
+  | { t: "gtool"; kind: GhostToolKind }
   | { t: "forced"; room: RoomId }
   | { t: "psychic"; loc: LocId }
   | { t: "use"; item: string; spot?: string }

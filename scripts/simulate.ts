@@ -27,6 +27,7 @@ for (let i = 0; i < 200; i++) {
   assert.equal(ghostSpots.length, 3);
   assert.ok(ghostSpots.filter((s) => s.cost === 3).length >= 2);
   assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "human").length, 13);
+  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 2);
   const flash = SPOTS.find((s) => {
     const c = room.spots[s.id];
     return c?.type === "human" && c.item.kind === "flashlight";
@@ -251,6 +252,87 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   const kenchi = room.logs.filter((l) => l.event === "kenchi");
   assert.deepEqual(kenchi.map((l) => l.to).sort(), ["ghost", "human"]);
   assert.ok(kenchi.every((l) => l.loc === "toilet"));
+}
+
+{
+  // The candle costs +2 to leave its room, not to search in it.
+  const room = newGame();
+  room.ghost.loc = "toilet";
+  room.ghost.spot = "toilet-0";
+  room.spots["toilet-1"] = null;
+  room.placed.candles.push("toilet");
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 3;
+  assert.throws(() => act(room, ghostId(room), { t: "gmove", to: "hall1" }), /必要 4/);
+  act(room, ghostId(room), { t: "search", spot: "toilet-1" });
+  assert.equal(room.turn.budget, 1, "search cost is the plain cost");
+}
+
+{
+  // Ghost tools: picked up by searching; the scrap heals up to the max, the tablet makes a hunter skip a turn.
+  const room = newGame();
+  room.ghost.loc = "kitchen";
+  room.ghost.spot = "kitchen-0";
+  room.ghost.collected = 1;
+  room.ghost.hp = 1;
+  room.spots["kitchen-1"] = { type: "tool", kind: "scrap" };
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 6;
+  act(room, ghostId(room), { t: "search", spot: "kitchen-1" });
+  assert.deepEqual(room.ghost.tools, ["scrap"]);
+  act(room, ghostId(room), { t: "gtool", kind: "scrap" });
+  assert.equal(room.ghost.hp, 2);
+  assert.deepEqual(room.ghost.tools, []);
+  room.ghost.tools = ["scrap"];
+  assert.throws(() => act(room, ghostId(room), { t: "gtool", kind: "scrap" }), /満タン/);
+  room.ghost.tools = ["tablet"];
+  act(room, ghostId(room), { t: "gtool", kind: "tablet" });
+  const cursed = room.hunters.find((h) => h.stunned)!;
+  assert.ok(cursed, "someone is cursed");
+  assert.equal(room.logs.at(-1)!.event, "curse");
+  act(room, ghostId(room), { t: "end" });
+  // Walk through the human turns: the cursed one is skipped once.
+  const played: number[] = [];
+  while (room.turn.side === "human") {
+    played.push(room.turn.hunter);
+    act(room, room.hunters[room.turn.hunter].controller, { t: "end" });
+  }
+  assert.ok(!played.includes(cursed.slot));
+  assert.equal(played.length, 2);
+  assert.equal(cursed.stunned, false);
+}
+
+{
+  // A human searching in the ghost's room: the result lands on the ghost's map too.
+  const room = newGame();
+  room.ghost.loc = "toilet";
+  room.ghost.spot = "toilet-0";
+  room.spots["toilet-1"] = { type: "human", item: { id: "c", kind: "crystal" } };
+  toHunters(room);
+  act(room, "host", { t: "move", loc: "toilet" });
+  act(room, "host", { t: "search", spot: "toilet-1" });
+  assert.deepEqual(room.ghostKnow["toilet-1"], { type: "human", kind: "crystal" });
+  room.hunters[0].items = [];
+  act(room, "host", { t: "resolve", take: true, leave: null });
+  assert.deepEqual(room.ghostKnow["toilet-1"], { type: "empty" }, "the ghost saw it taken");
+}
+
+{
+  // The 2nd item's forced move is announced to everyone as a popup.
+  const room = newGame();
+  room.ghost.loc = "attic";
+  room.ghost.spot = "attic-3";
+  room.ghost.collected = 1;
+  room.ghost.real = 1;
+  room.ghost.hp = 2;
+  room.spots["attic-0"] = { type: "ghost", name: "jewel", fake: false };
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 6;
+  act(room, ghostId(room), { t: "search", spot: "attic-0" });
+  act(room, ghostId(room), { t: "forced", room: "attic" });
+  const forced = room.logs.at(-1)!;
+  assert.equal(forced.event, "forced");
+  assert.equal(forced.to, "all");
 }
 
 {

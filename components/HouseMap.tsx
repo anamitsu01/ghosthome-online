@@ -1,6 +1,7 @@
 "use client";
 
-import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, ITEMS } from "@/lib/catalog";
+import type { ReactNode } from "react";
+import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, GHOST_TOOLS, ITEMS } from "@/lib/catalog";
 import {
   LAYOUT,
   PLAN_H,
@@ -27,6 +28,10 @@ export interface MapProps {
   onLoc: (loc: LocId) => void;
   /** Places to pulse (recent events). */
   flashes: { loc?: LocId; spot?: string; seq: number }[];
+  /** Rooms lit as a whole (where the ghost can step); their spots stay clickable without their own glow. */
+  glow?: Set<LocId>;
+  /** Controls shown in the open space of the 2nd floor, so they are always next to the map. */
+  overlay?: ReactNode;
 }
 
 const SPOT_W = 92;
@@ -71,6 +76,7 @@ function knownIcon(k: KnownSpot | undefined): string | null {
   if (!k) return null;
   if (k.type === "empty") return null;
   if (k.type === "human") return ITEMS[k.kind].icon;
+  if (k.type === "tool") return GHOST_TOOLS[k.kind].icon;
   return k.fake ? "🎭" : GHOST_ITEMS[k.name].icon;
 }
 
@@ -115,7 +121,15 @@ export default function HouseMap(props: MapProps) {
   );
 }
 
-function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: MapProps & { floor: Floor }) {
+/** The 2nd floor's open space, as percentages of the drawn plan (for placing HTML over it). */
+const VOID_BOX = {
+  left: `${((VOID_2F.x + 6 + 5) / (PLAN_W + 12)) * 100}%`,
+  top: `${((VOID_2F.y + 6 + 5) / (PLAN_H + 12)) * 100}%`,
+  width: `${((VOID_2F.w - 10) / (PLAN_W + 12)) * 100}%`,
+  height: `${((VOID_2F.h - 10) / (PLAN_H + 12)) * 100}%`,
+};
+
+function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glow, overlay }: MapProps & { floor: Floor }) {
   const locs = locsOnFloor(floor);
   const placed = room.placed;
   const know = room.humanKnow;
@@ -133,13 +147,21 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
         {horror && <span className="gh-flicker font-bold text-red-500">幽霊が完全復活している</span>}
       </div>
       {horror && <div className="gh-vignette pointer-events-none absolute inset-0 z-10" />}
+      <div className="relative">
+      {floor === 2 && overlay && (
+        <div className="absolute z-20" style={VOID_BOX}>
+          {overlay}
+        </div>
+      )}
       <svg viewBox={`-6 -6 ${PLAN_W + 12} ${PLAN_H + 12}`} className="w-full select-none">
         {floor === 2 && (
           <g>
             <rect {...VOID_2F} fill={`url(#void-hatch-${horror ? "h" : "c"})`} opacity="0.5" />
-            <text x={VOID_2F.x + VOID_2F.w / 2} y={VOID_2F.y + 150} textAnchor="middle" fontSize="18" fill={C.dim}>
-              吹き抜け
-            </text>
+            {!overlay && (
+              <text x={VOID_2F.x + VOID_2F.w / 2} y={VOID_2F.y + 150} textAnchor="middle" fontSize="18" fill={C.dim}>
+                吹き抜け
+              </text>
+            )}
           </g>
         )}
         <defs>
@@ -152,6 +174,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
         {locs.map((loc) => {
           const r = LAYOUT[loc];
           const clickable = targets.has(loc);
+          const lit = clickable || !!glow?.has(loc);
           const onPath = path.includes(loc);
           return (
             <g key={loc} onClick={() => clickable && onLoc(loc)} className={clickable ? "cursor-pointer" : ""}>
@@ -165,7 +188,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                 strokeWidth="3"
               />
               {onPath && <rect x={r.x + 4} y={r.y + 4} width={r.w - 8} height={r.h - 8} fill="none" stroke="#8b7dff" strokeOpacity="0.35" strokeWidth="2" strokeDasharray="6 5" />}
-              {clickable && <rect x={r.x + 3} y={r.y + 3} width={r.w - 6} height={r.h - 6} fill="#b6a8ff" fillOpacity="0.12" stroke="#b6a8ff" strokeWidth="2.5" className="gh-breathe" />}
+              {lit && <rect x={r.x + 3} y={r.y + 3} width={r.w - 6} height={r.h - 6} fill="#b6a8ff" fillOpacity="0.16" stroke="#b6a8ff" strokeWidth="3" className="gh-breathe" />}
               {flashLocs.has(loc) && <rect x={r.x + 2} y={r.y + 2} width={r.w - 4} height={r.h - 4} fill="#ffcf5a" className="gh-flash" />}
               <text x={r.x + 10} y={r.y + 23} fontSize="19" fontWeight="700" fill={C.label}>
                 {isHall(loc) ? `${floor}階廊下` : ROOM[loc as RoomId].name}
@@ -214,6 +237,8 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
             ROOM[r].spots.map((s, i) => {
               const rect = spotRects(r)[i];
               const clickable = targets.has(s.id);
+              // Inside a lit room the room glows instead of each spot.
+              const hot = clickable && !glow?.has(r);
               const isSel = selected === s.id;
               const icon = knownIcon(room.known[s.id]);
               const ofuda = placed?.ofuda.some((o) => o.spot === s.id);
@@ -228,8 +253,8 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                     width={rect.w}
                     height={rect.h}
                     rx="8"
-                    fill={clickable ? C.spotHot : C.spot}
-                    stroke={isSel ? "#ffe08a" : clickable ? "#b6a8ff" : C.wall}
+                    fill={hot ? C.spotHot : C.spot}
+                    stroke={isSel ? "#ffe08a" : hot ? "#b6a8ff" : C.wall}
                     strokeWidth={isSel ? 3 : 1.5}
                   />
                   {flashSpots.has(s.id) && <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="8" fill="#ffcf5a" className="gh-flash" />}
@@ -278,6 +303,11 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                 <text y="6" textAnchor="middle" fontSize="17" fontWeight="900" fill="#1d1b3a">
                   {h.alive ? c.icon : "✝"}
                 </text>
+                {h.alive && h.stunned && (
+                  <text x="12" y="-8" fontSize="14">
+                    🪦
+                  </text>
+                )}
               </g>
             );
           });
@@ -286,6 +316,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
         {/* ghost */}
         {ghost && locs.includes(ghost.loc) && <GhostToken room={room} />}
       </svg>
+      </div>
     </div>
   );
 }

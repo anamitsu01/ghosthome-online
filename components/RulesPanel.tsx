@@ -1,4 +1,4 @@
-import { CHARACTER_IDS, CHARACTERS, HIDDEN_ITEM_KINDS, HUMAN_ITEM_KINDS, ITEMS } from "@/lib/catalog";
+import { CHARACTER_IDS, CHARACTERS, GHOST_TOOL_KINDS, GHOST_TOOLS, HIDDEN_ITEM_KINDS, HUMAN_ITEM_KINDS, ITEMS } from "@/lib/catalog";
 
 export default function RulesPanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
   return (
@@ -48,6 +48,16 @@ export function RulesContent({ className = "" }: { className?: string }) {
           {[...HUMAN_ITEM_KINDS, ...HIDDEN_ITEM_KINDS].map((k) => (
             <li key={k}>
               {ITEMS[k].icon} <b className={b}>{ITEMS[k].name}</b>: {ITEMS[k].desc}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <b className={b}>幽霊の道具</b>(潜伏場所にランダム。幽霊が探索で拾い、自分のターンに使う。人間は見つけても持てない)
+        <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+          {GHOST_TOOL_KINDS.map((k) => (
+            <li key={k}>
+              {GHOST_TOOLS[k].icon} <b className={b}>{GHOST_TOOLS[k].name}</b>: {GHOST_TOOLS[k].desc}
             </li>
           ))}
         </ul>
