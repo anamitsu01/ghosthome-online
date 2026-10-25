@@ -8,6 +8,7 @@ import type { Action, ClientHunter, ClientRoom, Item, LogEntry } from "@/lib/typ
 import HouseMap, { ghostColor } from "./HouseMap";
 import GhostSprite from "./GhostSprite";
 import { DICE_RESULT_MS, DiceResult, DiceRow, RollButton } from "./Dice";
+import { RevivePopup, VictoryBanner } from "./Effects";
 
 type ActFn = <E extends keyof ClientToServerEvents>(
   event: E,
@@ -56,6 +57,9 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
     const timer = setTimeout(() => setSeenRoll(rollKey), DICE_RESULT_MS);
     return () => clearTimeout(timer);
   }, [showRoll, rollKey]);
+
+  // The winner banner, until it's clicked away.
+  const [closedWin, setClosedWin] = useState<number | null>(null);
 
   async function send(action: Action) {
     const err = await act("game:act", { action });
@@ -126,6 +130,9 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
     <div className="flex flex-col gap-3">
       <TurnBanner room={room} actorName={actorName} myTurn={myTurn} />
       {room.phase === "playing" && <FoundPopup room={room} />}
+      {room.phase === "gameover" && room.winner && closedWin !== room.game && (
+        <VictoryBanner winner={room.winner} onClose={() => setClosedWin(room.game)} />
+      )}
 
       <div className="grid gap-3 xl:grid-cols-[1fr_330px]">
         <div className="min-w-0">
@@ -667,11 +674,11 @@ function GameOver({ room, isHost, act }: { room: ClientRoom; isHost: boolean; ac
   );
 }
 
-/** Pops up what a search (or the flashlight) turned up, one discovery at a time. */
+/** Pops up what a search (or the flashlight) turned up, and the full revival, one at a time. */
 function FoundPopup({ room }: { room: ClientRoom }) {
   const newest = room.logs.length ? room.logs[room.logs.length - 1].seq : 0;
   const [seen, setSeen] = useState(newest);
-  const entry = room.logs.find((l) => l.found && l.seq > seen);
+  const entry = room.logs.find((l) => (l.found || l.event) && l.seq > seen);
   useEffect(() => {
     if (!entry) return;
     const onKey = (e: KeyboardEvent) => {
@@ -680,6 +687,7 @@ function FoundPopup({ room }: { room: ClientRoom }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [entry]);
+  if (entry?.event === "revive") return <RevivePopup room={room} spot={entry.spot} onClose={() => setSeen(entry.seq)} />;
   if (!entry?.found) return null;
   const f = entry.found;
   if (f.type === "empty") return null;

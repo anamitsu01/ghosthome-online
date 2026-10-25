@@ -82,6 +82,30 @@ export function ghostColor(room: ClientRoom): string {
   return room.viewerSide === "ghost" || room.phase === "gameover" ? GHOST_COLORS[Math.min(g.collected, 2)] : GHOST_COLORS[0];
 }
 
+/** Colours of the house; after the full revival it turns blood red and black. */
+const CALM = {
+  room: "#1c1833",
+  hall: "#141127",
+  wall: "#4a4370",
+  label: "#cfc8f5",
+  spot: "#26213f",
+  spotHot: "#3a3266",
+  spotText: "#f1eeff",
+  hatch: "#2a2547",
+  dim: "#8a82b5",
+};
+const HORROR = {
+  room: "#240609",
+  hall: "#140304",
+  wall: "#7c1420",
+  label: "#ff9a9a",
+  spot: "#36080e",
+  spotHot: "#5c121b",
+  spotText: "#ffe0e0",
+  hatch: "#3d0a10",
+  dim: "#c0606a",
+};
+
 export default function HouseMap(props: MapProps) {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
@@ -99,24 +123,28 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
   const flashLocs = new Set(flashes.map((f) => f.loc).filter(Boolean));
   const ghost = room.ghost;
   const path = room.turn?.path ?? [];
+  const horror = !!ghost?.revived;
+  const C = horror ? HORROR : CALM;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-panel/70 p-2">
+    <div className={`relative overflow-hidden rounded-xl border p-2 ${horror ? "gh-horror border-red-800/80 bg-[#0e0204]" : "border-white/10 bg-panel/70"}`}>
       <div className="mb-1 flex items-center justify-between px-1 text-xs text-white/50">
-        <span className="font-bold text-white/70">{floor}階</span>
+        <span className={`font-bold ${horror ? "text-red-400" : "text-white/70"}`}>{floor}階</span>
+        {horror && <span className="gh-flicker font-bold text-red-500">幽霊が完全復活している</span>}
       </div>
+      {horror && <div className="gh-vignette pointer-events-none absolute inset-0 z-10" />}
       <svg viewBox={`-6 -6 ${PLAN_W + 12} ${PLAN_H + 12}`} className="w-full select-none">
         {floor === 2 && (
           <g>
-            <rect {...VOID_2F} fill="url(#void-hatch)" opacity="0.5" />
-            <text x={VOID_2F.x + VOID_2F.w / 2} y={VOID_2F.y + 150} textAnchor="middle" fontSize="18" fill="#6b6590">
+            <rect {...VOID_2F} fill={`url(#void-hatch-${horror ? "h" : "c"})`} opacity="0.5" />
+            <text x={VOID_2F.x + VOID_2F.w / 2} y={VOID_2F.y + 150} textAnchor="middle" fontSize="18" fill={C.dim}>
               吹き抜け
             </text>
           </g>
         )}
         <defs>
-          <pattern id="void-hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="10" stroke="#2a2547" strokeWidth="3" />
+          <pattern id={`void-hatch-${horror ? "h" : "c"}`} width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="10" stroke={C.hatch} strokeWidth="3" />
           </pattern>
         </defs>
 
@@ -132,23 +160,23 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                 y={r.y}
                 width={r.w}
                 height={r.h}
-                fill={isHall(loc) ? "#141127" : "#1c1833"}
-                stroke="#4a4370"
+                fill={isHall(loc) ? C.hall : C.room}
+                stroke={C.wall}
                 strokeWidth="3"
               />
               {onPath && <rect x={r.x + 4} y={r.y + 4} width={r.w - 8} height={r.h - 8} fill="none" stroke="#8b7dff" strokeOpacity="0.35" strokeWidth="2" strokeDasharray="6 5" />}
               {clickable && <rect x={r.x + 3} y={r.y + 3} width={r.w - 6} height={r.h - 6} fill="#b6a8ff" fillOpacity="0.12" stroke="#b6a8ff" strokeWidth="2.5" className="gh-breathe" />}
               {flashLocs.has(loc) && <rect x={r.x + 2} y={r.y + 2} width={r.w - 4} height={r.h - 4} fill="#ffcf5a" className="gh-flash" />}
-              <text x={r.x + 10} y={r.y + 23} fontSize="19" fontWeight="700" fill="#cfc8f5">
+              <text x={r.x + 10} y={r.y + 23} fontSize="19" fontWeight="700" fill={C.label}>
                 {isHall(loc) ? `${floor}階廊下` : ROOM[loc as RoomId].name}
               </text>
               {isHall(loc) && (
                 <g>
                   {/* stairs */}
                   {[0, 1, 2, 3, 4].map((i) => (
-                    <rect key={i} x={r.x + r.w - 92 + i * 15} y={r.y + 34} width="13" height={56} fill="#2a2547" stroke="#4a4370" />
+                    <rect key={i} x={r.x + r.w - 92 + i * 15} y={r.y + 34} width="13" height={56} fill={C.hatch} stroke={C.wall} />
                   ))}
-                  <text x={r.x + r.w - 56} y={r.y + 26} textAnchor="middle" fontSize="13" fill="#8a82b5">
+                  <text x={r.x + r.w - 56} y={r.y + 26} textAnchor="middle" fontSize="13" fill={C.dim}>
                     階段 ⇅
                   </text>
                 </g>
@@ -176,7 +204,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
           if (!d) return null;
           return (
             <g key={`${a}-${b}`} pointerEvents="none">
-              <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke="#141127" strokeWidth="6" />
+              <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke={C.hall} strokeWidth="6" />
               <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke="#e0b85a" strokeWidth="2" strokeDasharray="4 3" />
             </g>
           );
@@ -203,12 +231,12 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                     width={rect.w}
                     height={rect.h}
                     rx="8"
-                    fill={clickable ? "#3a3266" : "#26213f"}
-                    stroke={isSel ? "#ffe08a" : clickable ? "#b6a8ff" : "#4a4370"}
+                    fill={clickable ? C.spotHot : C.spot}
+                    stroke={isSel ? "#ffe08a" : clickable ? "#b6a8ff" : C.wall}
                     strokeWidth={isSel ? 3 : 1.5}
                   />
                   {flashSpots.has(s.id) && <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="8" fill="#ffcf5a" className="gh-flash" />}
-                  <text x={rect.x + rect.w / 2} y={rect.y + 21} textAnchor="middle" fontSize={s.name.length > 5 ? 12.5 : s.name.length > 4 ? 14 : 16} fontWeight="600" fill="#f1eeff">
+                  <text x={rect.x + rect.w / 2} y={rect.y + 21} textAnchor="middle" fontSize={s.name.length > 5 ? 12.5 : s.name.length > 4 ? 14 : 16} fontWeight="600" fill={C.spotText}>
                     {s.name}
                   </text>
                   {/* search cost for this viewer's side */}

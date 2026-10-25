@@ -145,6 +145,7 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   act(room, ghostId(room), { t: "end" });
   room.hunters[0].loc = "kids";
   room.hunters[1].loc = "kids";
+  room.hunters[1].items = [];
   give(room, 1, "doll");
   for (let i = 0; i < 3; i++) act(room, room.hunters[i].controller, { t: "end" });
   act(room, ghostId(room), { t: "roll" });

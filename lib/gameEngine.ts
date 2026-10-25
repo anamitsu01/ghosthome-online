@@ -203,7 +203,7 @@ function log(
   to: Audience,
   text: string,
   tone: Tone = "info",
-  where: { loc?: LocId; spot?: string; found?: KnownSpot } = {}
+  where: { loc?: LocId; spot?: string; found?: KnownSpot; event?: "revive" } = {}
 ): void {
   room.logs.push({ seq: ++room.logSeq, to, text, tone, ...where });
   room.logs = room.logs.slice(-LOGS_KEPT);
@@ -549,7 +549,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   } else if (!g.revived && g.real >= 3) {
     g.revived = true;
     g.hp += 1;
-    log(room, "all", `🟥 幽霊が完全復活した! 居場所は ${spotName(g.spot!)}`, "bad", { spot: g.spot! });
+    log(room, "all", `🟥 幽霊が完全復活した! 居場所は ${spotName(g.spot!)}`, "bad", { spot: g.spot!, event: "revive" });
   } else {
     log(room, "ghost", "…何も起きない。どれかが偽物だったようだ。", "warn");
   }

@@ -113,6 +113,8 @@ export interface LogEntry {
   spot?: string;
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
+  /** A big moment shown as a popup to everyone. */
+  event?: "revive";
 }
 
 export interface HumanKnowledge {
