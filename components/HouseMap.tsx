@@ -1,0 +1,308 @@
+"use client";
+
+import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, ITEMS } from "@/lib/catalog";
+import {
+  LAYOUT,
+  PLAN_H,
+  PLAN_W,
+  ROOM,
+  VOID_2F,
+  doorsOnFloor,
+  isHall,
+  locsOnFloor,
+  type Floor,
+  type LocId,
+  type Rect,
+  type RoomId,
+} from "@/lib/map";
+import type { ClientRoom, KnownSpot } from "@/lib/types";
+import { GhostShape } from "./GhostSprite";
+
+export interface MapProps {
+  room: ClientRoom;
+  /** Spot ids and location ids that can be clicked now. */
+  targets: Set<string>;
+  selected: string | null;
+  onSpot: (spotId: string) => void;
+  onLoc: (loc: LocId) => void;
+  /** Places to pulse (recent events). */
+  flashes: { loc?: LocId; spot?: string; seq: number }[];
+}
+
+const SPOT_W = 84;
+const SPOT_H = 42;
+
+/** Where each hiding spot sits inside its room. */
+function spotRects(r: RoomId): Rect[] {
+  const box = LAYOUT[r];
+  const n = ROOM[r].spots.length;
+  const cols = n <= 2 && box.w < 230 ? 1 : 2;
+  const rows = Math.ceil(n / cols);
+  const w = Math.min(SPOT_W, (box.w - (cols + 1) * 6) / cols);
+  const top = box.y + 28;
+  const gapX = (box.w - cols * w) / (cols + 1);
+  const gapY = Math.max(4, (box.h - 28 - 28 - rows * SPOT_H) / (rows + 1));
+  return ROOM[r].spots.map((_, i) => {
+    const c = i % cols;
+    const row = Math.floor(i / cols);
+    return { x: box.x + gapX + c * (w + gapX), y: top + gapY + row * (SPOT_H + gapY), w, h: SPOT_H };
+  });
+}
+
+/** The doorway between two rectangles: the middle of their shared edge. */
+function doorway(a: Rect, b: Rect): [number, number, number, number] | null {
+  const ix0 = Math.max(a.x, b.x);
+  const ix1 = Math.min(a.x + a.w, b.x + b.w);
+  const iy0 = Math.max(a.y, b.y);
+  const iy1 = Math.min(a.y + a.h, b.y + b.h);
+  const L = 34;
+  if (ix0 === ix1 && iy1 > iy0) {
+    const m = (iy0 + iy1) / 2;
+    return [ix0, m - L / 2, ix0, m + L / 2];
+  }
+  if (iy0 === iy1 && ix1 > ix0) {
+    const m = (ix0 + ix1) / 2;
+    return [m - L / 2, iy0, m + L / 2, iy0];
+  }
+  return null;
+}
+
+function knownIcon(k: KnownSpot | undefined): string | null {
+  if (!k) return null;
+  if (k.type === "empty") return "・";
+  if (k.type === "human") return ITEMS[k.kind].icon;
+  return k.fake ? "🎭" : GHOST_ITEMS[k.name].icon;
+}
+
+export function ghostColor(room: ClientRoom): string {
+  const g = room.ghost;
+  if (!g) return GHOST_COLORS[0];
+  if (g.revived) return GHOST_COLORS[3];
+  // Humans only ever see the revived (red) ghost; the ghost sees its own shade.
+  return room.viewerSide === "ghost" || room.phase === "gameover" ? GHOST_COLORS[Math.min(g.collected, 2)] : GHOST_COLORS[0];
+}
+
+export default function HouseMap(props: MapProps) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <FloorPlan floor={2} {...props} />
+      <FloorPlan floor={1} {...props} />
+    </div>
+  );
+}
+
+function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: MapProps & { floor: Floor }) {
+  const locs = locsOnFloor(floor);
+  const placed = room.placed;
+  const know = room.humanKnow;
+  const flashSpots = new Set(flashes.map((f) => f.spot).filter(Boolean));
+  const flashLocs = new Set(flashes.map((f) => f.loc).filter(Boolean));
+  const ghost = room.ghost;
+  const path = room.turn?.path ?? [];
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-panel/70 p-2">
+      <div className="mb-1 flex items-center justify-between px-1 text-xs text-white/50">
+        <span className="font-bold text-white/70">{floor}階</span>
+      </div>
+      <svg viewBox={`-6 -6 ${PLAN_W + 12} ${PLAN_H + 12}`} className="w-full select-none">
+        {floor === 2 && (
+          <g>
+            <rect {...VOID_2F} fill="url(#void-hatch)" opacity="0.5" />
+            <text x={VOID_2F.x + VOID_2F.w / 2} y={VOID_2F.y + 120} textAnchor="middle" fontSize="15" fill="#6b6590">
+              吹き抜け
+            </text>
+          </g>
+        )}
+        <defs>
+          <pattern id="void-hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="10" stroke="#2a2547" strokeWidth="3" />
+          </pattern>
+        </defs>
+
+        {/* floors */}
+        {locs.map((loc) => {
+          const r = LAYOUT[loc];
+          const clickable = targets.has(loc);
+          const onPath = path.includes(loc);
+          return (
+            <g key={loc} onClick={() => clickable && onLoc(loc)} className={clickable ? "cursor-pointer" : ""}>
+              <rect
+                x={r.x}
+                y={r.y}
+                width={r.w}
+                height={r.h}
+                fill={isHall(loc) ? "#141127" : "#1c1833"}
+                stroke="#4a4370"
+                strokeWidth="3"
+              />
+              {onPath && <rect x={r.x + 4} y={r.y + 4} width={r.w - 8} height={r.h - 8} fill="none" stroke="#8b7dff" strokeOpacity="0.35" strokeWidth="2" strokeDasharray="6 5" />}
+              {clickable && <rect x={r.x + 3} y={r.y + 3} width={r.w - 6} height={r.h - 6} fill="#b6a8ff" fillOpacity="0.12" stroke="#b6a8ff" strokeWidth="2.5" className="gh-breathe" />}
+              {flashLocs.has(loc) && <rect x={r.x + 2} y={r.y + 2} width={r.w - 4} height={r.h - 4} fill="#ffcf5a" className="gh-flash" />}
+              <text x={r.x + 10} y={r.y + 21} fontSize="16" fontWeight="700" fill="#cfc8f5">
+                {isHall(loc) ? `${floor}階廊下` : ROOM[loc as RoomId].name}
+              </text>
+              {isHall(loc) && (
+                <g>
+                  {/* stairs */}
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <rect key={i} x={r.x + r.w - 92 + i * 15} y={r.y + 30} width="13" height={46} fill="#2a2547" stroke="#4a4370" />
+                  ))}
+                  <text x={r.x + r.w - 56} y={r.y + 25} textAnchor="middle" fontSize="11" fill="#8a82b5">
+                    階段 ⇅
+                  </text>
+                </g>
+              )}
+              {!isHall(loc) && (
+                <RoomBadges
+                  r={r}
+                  bell={placed?.bells.some((b) => b.room === loc)}
+                  holy={placed?.holy.some((h) => h.room === loc && room.ghostTurns < h.until)}
+                  candle={placed?.candles.includes(loc as RoomId)}
+                  hidden={
+                    (know?.hiddenRoom === loc && (know.hiddenFound ? "found" : "known")) ||
+                    (room.hidden?.room === loc ? "found" : null)
+                  }
+                  locked={room.lock?.room === loc && room.ghostTurns < room.lock.until}
+                />
+              )}
+            </g>
+          );
+        })}
+
+        {/* doorways */}
+        {doorsOnFloor(floor).map(([a, b]) => {
+          const d = doorway(LAYOUT[a], LAYOUT[b]);
+          if (!d) return null;
+          return (
+            <g key={`${a}-${b}`} pointerEvents="none">
+              <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke="#141127" strokeWidth="6" />
+              <line x1={d[0]} y1={d[1]} x2={d[2]} y2={d[3]} stroke="#e0b85a" strokeWidth="2" strokeDasharray="4 3" />
+            </g>
+          );
+        })}
+
+        {/* hiding spots */}
+        {locs
+          .filter((l): l is RoomId => !isHall(l))
+          .map((r) =>
+            ROOM[r].spots.map((s, i) => {
+              const rect = spotRects(r)[i];
+              const clickable = targets.has(s.id);
+              const isSel = selected === s.id;
+              const icon = knownIcon(room.known[s.id]);
+              const ofuda = placed?.ofuda.some((o) => o.spot === s.id);
+              const mirror = placed?.mirrors.some((m) => m.spot === s.id);
+              const searched = know?.ghostSearched.includes(s.id);
+              const humanCost = Math.max(0, s.cost - 1);
+              return (
+                <g key={s.id} onClick={(e) => (e.stopPropagation(), clickable && onSpot(s.id))} className={clickable ? "cursor-pointer" : ""}>
+                  <rect
+                    x={rect.x}
+                    y={rect.y}
+                    width={rect.w}
+                    height={rect.h}
+                    rx="8"
+                    fill={clickable ? "#3a3266" : "#26213f"}
+                    stroke={isSel ? "#ffe08a" : clickable ? "#b6a8ff" : "#4a4370"}
+                    strokeWidth={isSel ? 3 : 1.5}
+                  />
+                  {flashSpots.has(s.id) && <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="8" fill="#ffcf5a" className="gh-flash" />}
+                  <text x={rect.x + rect.w / 2} y={rect.y + 18} textAnchor="middle" fontSize={s.name.length > 5 ? 10.5 : 13} fill="#e9e5ff">
+                    {s.name}
+                  </text>
+                  <text x={rect.x + 6} y={rect.y + rect.h - 7} fontSize="10" fill="#9a92c8">
+                    {room.viewerSide === "ghost" ? `探${s.cost}` : `探${humanCost}`}
+                  </text>
+                  {icon && (
+                    <text x={rect.x + rect.w / 2} y={rect.y + rect.h - 6} textAnchor="middle" fontSize="15">
+                      {icon}
+                    </text>
+                  )}
+                  <text x={rect.x + rect.w - 5} y={rect.y + rect.h - 6} textAnchor="end" fontSize="12">
+                    {ofuda ? "📜" : ""}
+                    {mirror ? "🪞" : ""}
+                    {searched ? "👣" : ""}
+                  </text>
+                </g>
+              );
+            })
+          )}
+
+        {/* hunters */}
+        {locs.map((loc) => {
+          const here = room.hunters.filter((h) => h.loc === loc);
+          if (!here.length) return null;
+          const r = LAYOUT[loc];
+          const y = isHall(loc) ? r.y + r.h - 22 : r.y + r.h - 16;
+          const x0 = isHall(loc) ? r.x + 24 : r.x + r.w - 18 - (here.length - 1) * 26;
+          return here.map((h, i) => {
+            const c = CHARACTERS[h.character];
+            const active = room.turn?.side === "human" && room.turn.hunter === h.slot && !room.escape;
+            return (
+              <g key={h.slot} transform={`translate(${x0 + i * 26} ${y})`} opacity={h.alive ? 1 : 0.35} pointerEvents="none">
+                {active && <circle r="15" fill="none" stroke="#ffe08a" strokeWidth="2.5" className="gh-breathe" />}
+                <circle r="12" fill={c.color} stroke="#0b0918" strokeWidth="2" />
+                <text y="5" textAnchor="middle" fontSize="13">
+                  {h.alive ? c.icon : "✝"}
+                </text>
+              </g>
+            );
+          });
+        })}
+
+        {/* ghost */}
+        {ghost && locs.includes(ghost.loc) && <GhostToken room={room} />}
+      </svg>
+    </div>
+  );
+}
+
+function GhostToken({ room }: { room: ClientRoom }) {
+  const g = room.ghost!;
+  let cx: number;
+  let cy: number;
+  if (g.spot) {
+    const r = g.spot.split("-")[0] as RoomId;
+    const idx = ROOM[r].spots.findIndex((s) => s.id === g.spot);
+    const rect = spotRects(r)[idx];
+    cx = rect.x + rect.w - 2;
+    cy = rect.y + 2;
+  } else {
+    const r = LAYOUT[g.loc];
+    cx = r.x + r.w / 2 - 40;
+    cy = r.y + r.h / 2;
+  }
+  return (
+    <g transform={`translate(${cx - 15} ${cy - 16})`} pointerEvents="none" className="gh-float">
+      <g transform="scale(0.78)">
+        <GhostShape color={ghostColor(room)} />
+      </g>
+    </g>
+  );
+}
+
+function RoomBadges({
+  r,
+  bell,
+  holy,
+  candle,
+  hidden,
+  locked,
+}: {
+  r: Rect;
+  bell?: boolean;
+  holy?: boolean;
+  candle?: boolean;
+  hidden: "known" | "found" | null | false;
+  locked?: boolean;
+}) {
+  const icons = [bell && "🔔", holy && "💧", candle && "🕯️", hidden === "found" ? "✨" : hidden === "known" ? "❔" : null, locked && "🪞"].filter(
+    Boolean
+  ) as string[];
+  return (
+    <text x={r.x + r.w - 8} y={r.y + 21} textAnchor="end" fontSize="14" pointerEvents="none">
+      {icons.join("")}
+    </text>
+  );
+}

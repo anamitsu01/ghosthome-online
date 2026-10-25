@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b0918;
+  --foreground: #ece9fb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-violet: #8b7dff;
+  --color-gold: #ffcf5a;
+  --color-panel: #151229;
+  --color-ink: #ece9fb;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 15% 0%, rgba(139, 125, 255, 0.14), transparent 55%),
+    radial-gradient(ellipse at 85% 100%, rgba(233, 87, 131, 0.08), transparent 55%),
+    var(--background);
+  background-attachment: fixed;
+  color: var(--foreground);
+}
+
+/* Clickable places breathe. */
+@keyframes gh-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.gh-breathe {
+  animation: gh-breathe 1.6s ease-in-out infinite;
+}
+
+/* A place something just happened. */
+@keyframes gh-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.gh-flash {
+  pointer-events: none;
+  animation: gh-flash 4.5s ease-out both;
+}
+
+/* The ghost bobs. */
+@keyframes gh-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -3px;
+  }
+}
+.gh-float {
+  animation: gh-float 2.4s ease-in-out infinite;
+}
