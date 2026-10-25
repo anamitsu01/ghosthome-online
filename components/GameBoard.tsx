@@ -333,7 +333,7 @@ function HuntersPublic({ room }: { room: ClientRoom }) {
       <ul className="space-y-1">
         {room.hunters.map((h) => (
           <li key={h.slot} className={`flex items-center gap-2 ${h.alive ? "" : "opacity-40 line-through"}`}>
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full" style={{ background: CHARACTERS[h.character].color }}>
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-black text-[#1d1b3a]" style={{ background: CHARACTERS[h.character].color }}>
               {CHARACTERS[h.character].icon}
             </span>
             <span>{CHARACTERS[h.character].name}</span>
@@ -388,7 +388,7 @@ function HunterControls({
   return (
     <div className="space-y-3 text-sm">
       <p className="flex items-center gap-2 font-bold">
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full" style={{ background: c.color }}>
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full font-black text-[#1d1b3a]" style={{ background: c.color }}>
           {c.icon}
         </span>
         {c.name}({locName(hunter.loc)})
@@ -585,7 +585,7 @@ function HuntersPanel({ room, viewerId }: { room: ClientRoom; viewerId: string }
           return (
             <li key={h.slot} className={`rounded-lg bg-white/5 px-2 py-1.5 ${h.alive ? "" : "opacity-40"}`}>
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: c.color }}>
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-black text-[#1d1b3a]" style={{ background: c.color }}>
                   {h.alive ? c.icon : "✝"}
                 </span>
                 <span className="font-bold" title={c.desc}>

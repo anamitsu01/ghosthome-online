@@ -57,7 +57,13 @@ export function RulesContent({ className = "" }: { className?: string }) {
         <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
           {CHARACTER_IDS.map((id) => (
             <li key={id}>
-              {CHARACTERS[id].icon} <b className={b}>{CHARACTERS[id].name}</b>: {CHARACTERS[id].desc}
+              <span
+                className="mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full align-[-3px] text-xs font-black text-[#1d1b3a]"
+                style={{ background: CHARACTERS[id].color }}
+              >
+                {CHARACTERS[id].icon}
+              </span>
+              <b className={b}>{CHARACTERS[id].name}</b>: {CHARACTERS[id].desc}
             </li>
           ))}
         </ul>

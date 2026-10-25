@@ -86,19 +86,20 @@ export type CharacterId = "medium" | "miko" | "scientist" | "painter" | "psychic
 export interface CharacterDef {
   id: CharacterId;
   name: string;
+  /** Kanji initial shown on the character's token. */
   icon: string;
   color: string;
   desc: string;
 }
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
-  medium: { id: "medium", name: "霊媒師", icon: "🕯", color: "#a78bfa", desc: "ゲーム開始時の幽霊の潜伏場所が分かる。" },
-  miko: { id: "miko", name: "巫女", icon: "⛩", color: "#f87171", desc: "部屋に入ると、その部屋で幽霊が探索したことのある潜伏場所が分かる。" },
-  scientist: { id: "scientist", name: "科学者", icon: "🔬", color: "#34d399", desc: "科学者のいる部屋に幽霊が入るとき、移動コスト+2。" },
-  painter: { id: "painter", name: "絵描き", icon: "🎨", color: "#fbbf24", desc: "アイテムを3つまで持てる。" },
-  psychic: { id: "psychic", name: "超能力者", icon: "🌀", color: "#60a5fa", desc: "1ゲームに1度、サイコロを振る前に好きな部屋・廊下へワープできる。" },
-  magician: { id: "magician", name: "手品師", icon: "🎩", color: "#f472b6", desc: "幽霊アイテムの偽物を1つ持って始まる。探索した場所に置ける。" },
-  jujutsu: { id: "jujutsu", name: "呪術師", icon: "🪬", color: "#fb923c", desc: "隠しアイテムのある部屋が分かる(手に入れるには懐中電灯を持ってその部屋へ)。" },
+  medium: { id: "medium", name: "霊媒師", icon: "霊", color: "#a78bfa", desc: "ゲーム開始時の幽霊の潜伏場所が分かる。" },
+  miko: { id: "miko", name: "巫女", icon: "巫", color: "#f87171", desc: "部屋に入ると、その部屋で幽霊が探索したことのある潜伏場所が分かる。" },
+  scientist: { id: "scientist", name: "科学者", icon: "科", color: "#34d399", desc: "科学者のいる部屋に幽霊が入るとき、移動コスト+2。" },
+  painter: { id: "painter", name: "絵描き", icon: "絵", color: "#fbbf24", desc: "アイテムを3つまで持てる。" },
+  psychic: { id: "psychic", name: "超能力者", icon: "超", color: "#60a5fa", desc: "1ゲームに1度、サイコロを振る前に好きな部屋・廊下へワープできる。" },
+  magician: { id: "magician", name: "手品師", icon: "手", color: "#f472b6", desc: "幽霊アイテムの偽物を1つ持って始まる。探索した場所に置ける。" },
+  jujutsu: { id: "jujutsu", name: "呪術師", icon: "呪", color: "#fb923c", desc: "隠しアイテムのある部屋が分かる(手に入れるには懐中電灯を持ってその部屋へ)。" },
 };
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 

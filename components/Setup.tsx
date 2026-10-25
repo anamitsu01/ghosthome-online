@@ -37,8 +37,11 @@ export default function Setup({
               {slot + 1}人目 ・ {humans[slot % humans.length]?.name}
             </p>
             {c ? (
-              <p className="mt-1 font-bold">
-                {CHARACTERS[c].icon} {CHARACTERS[c].name}
+              <p className="mt-1 flex items-center justify-center gap-1.5 font-bold">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-black text-[#1d1b3a]" style={{ background: CHARACTERS[c].color }}>
+                  {CHARACTERS[c].icon}
+                </span>
+                {CHARACTERS[c].name}
               </p>
             ) : (
               <p className="mt-1 text-white/30">未選択</p>
@@ -59,7 +62,7 @@ export default function Setup({
                   chosen ? "border-gold bg-gold/10" : "border-white/10 bg-white/5 enabled:hover:bg-white/10"
                 }`}
               >
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg" style={{ background: c.color }}>
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-black text-[#1d1b3a]" style={{ background: c.color }}>
                   {c.icon}
                 </span>
                 <span>
