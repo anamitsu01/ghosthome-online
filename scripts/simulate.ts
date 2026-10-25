@@ -255,17 +255,23 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // The candle costs +2 to leave its room, not to search in it.
+  // The candle: +2 on the ghost's searches in its room, and the ghost is told when it walks in.
   const room = newGame();
-  room.ghost.loc = "toilet";
-  room.ghost.spot = "toilet-0";
+  room.ghost.loc = "hall1";
+  room.ghost.spot = null;
   room.spots["toilet-1"] = null;
   room.placed.candles.push("toilet");
   act(room, ghostId(room), { t: "roll" });
-  room.turn.budget = 3;
-  assert.throws(() => act(room, ghostId(room), { t: "gmove", to: "hall1" }), /必要 4/);
+  room.turn.budget = 5;
+  act(room, ghostId(room), { t: "gmove", to: "toilet-0" });
+  assert.equal(room.turn.budget, 3, "entering costs the usual 2");
+  assert.equal(room.logs.at(-1)!.event, "candle");
+  assert.equal(room.logs.at(-1)!.to, "ghost");
+  assert.deepEqual(viewFor(room, ghostId(room)).ghostCandles, ["toilet"]);
+  assert.throws(() => act(room, ghostId(room), { t: "search", spot: "toilet-1" }), /探索コスト 4/);
+  room.turn.budget = 4;
   act(room, ghostId(room), { t: "search", spot: "toilet-1" });
-  assert.equal(room.turn.budget, 1, "search cost is the plain cost");
+  assert.equal(room.turn.budget, 0);
 }
 
 {
@@ -279,14 +285,17 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   act(room, ghostId(room), { t: "roll" });
   room.turn.budget = 6;
   act(room, ghostId(room), { t: "search", spot: "kitchen-1" });
-  assert.deepEqual(room.ghost.tools, ["scrap"]);
+  assert.deepEqual(room.ghost.tools, [{ kind: "scrap", uses: 1 }]);
   act(room, ghostId(room), { t: "gtool", kind: "scrap" });
   assert.equal(room.ghost.hp, 2);
   assert.deepEqual(room.ghost.tools, []);
-  room.ghost.tools = ["scrap"];
+  room.ghost.tools = [{ kind: "scrap", uses: 1 }];
+  room.usedThisRound = [];
   assert.throws(() => act(room, ghostId(room), { t: "gtool", kind: "scrap" }), /満タン/);
-  room.ghost.tools = ["tablet"];
+  room.ghost.tools = [{ kind: "tablet", uses: 3 }];
   act(room, ghostId(room), { t: "gtool", kind: "tablet" });
+  assert.equal(room.ghost.tools[0].uses, 2, "the tablet has 3 uses");
+  assert.throws(() => act(room, ghostId(room), { t: "gtool", kind: "tablet" }), /もう使いました/);
   const cursed = room.hunters.find((h) => h.stunned)!;
   assert.ok(cursed, "someone is cursed");
   assert.equal(room.logs.at(-1)!.event, "curse");

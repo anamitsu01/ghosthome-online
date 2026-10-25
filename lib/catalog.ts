@@ -48,7 +48,7 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   sword: { kind: "sword", name: "勾玉の剣", icon: "🗡️", use: "passive", desc: "完全復活した幽霊のいる場所を探索すると1ダメージ。" },
   gambler: { kind: "gambler", name: "ギャンブラーのサイコロ", icon: "🎲", use: "self", uses: 3, desc: "使った次の自分のターン、サイコロが1個増える。3回まで。" },
   flashlight: { kind: "flashlight", name: "懐中電灯", icon: "🔦", use: "passive", desc: "持って隠しアイテムのある部屋に入ると、懐中電灯と引き換えにその場で隠しアイテムを手に入れる。" },
-  candle: { kind: "candle", name: "マッチと蝋燭", icon: "🕯️", use: "room", desc: "今いる部屋に設置。幽霊がその部屋から出ていくときの移動コストが+2(ゲーム終了まで)。使い捨て。" },
+  candle: { kind: "candle", name: "マッチと蝋燭", icon: "🕯️", use: "room", desc: "今いる部屋に設置。幽霊がその部屋で探索するコストが+2(ゲーム終了まで)。幽霊は部屋に入ると気づく。使い捨て。" },
   mirror: { kind: "mirror", name: "手鏡", icon: "🪞", use: "spot", retrievable: true, desc: "潜伏場所に設置。幽霊がそこに潜伏すると、次の幽霊ターンはその部屋から出られない。" },
   redbeads: { kind: "redbeads", name: "赤い数珠", icon: "📿", use: "passive", desc: "青い数珠と両方持っていればサイコロ+1。" },
   bluebeads: { kind: "bluebeads", name: "青い数珠", icon: "🧿", use: "passive", desc: "赤い数珠と両方持っていればサイコロ+1。" },
@@ -83,9 +83,9 @@ export const GHOST_ITEM_NAMES: GhostItemName[] = ["bracelet", "jewel", "knife"];
 
 /** The ghost's own tools: found in hiding spots like everything else, usable only by the ghost. */
 export type GhostToolKind = "scrap" | "tablet";
-export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; desc: string }> = {
-  scrap: { name: "焼け焦げた切れ端", icon: "🔥", desc: "幽霊の体力を1回復する(最大まで)。使い捨て。" },
-  tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を1人ランダムに選び、次のターン行動不能にする。使い捨て。" },
+export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; desc: string; uses: number }> = {
+  scrap: { name: "焼け焦げた切れ端", icon: "🔥", desc: "幽霊の体力を1回復する(最大まで)。使い捨て。", uses: 1 },
+  tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を1人ランダムに選び、次のターン行動不能にする。3回まで(1ターン1回)。", uses: 3 },
 };
 export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet"];
 

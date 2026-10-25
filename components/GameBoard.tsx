@@ -265,6 +265,12 @@ function Btn({
 
 // ---------- quick actions (in the 2nd floor's open space) ----------
 
+/** The ghost's search cost as it knows it: +2 in candle rooms it has walked into. */
+export function ghostCost(room: ClientRoom, spotId: string): number {
+  const s = SPOT[spotId];
+  return s.cost + (room.ghostCandles.includes(s.room) ? 2 : 0);
+}
+
 function QBtn({ children, onClick, primary, disabled }: { children: React.ReactNode; onClick: () => void; primary?: boolean; disabled?: boolean }) {
   return (
     <button
@@ -349,8 +355,8 @@ function QuickActions({
             <>
               <p className="font-bold text-ink">{sel.name}</p>
               {sel.id !== g.spot && <QBtn onClick={() => send({ t: "gmove", to: sel.id })}>ここへ移る(0)</QBtn>}
-              <QBtn primary disabled={sel.cost > budget} onClick={() => send({ t: "search", spot: sel.id })}>
-                🔍 探索({sel.cost})
+              <QBtn primary disabled={ghostCost(room, sel.id) > budget} onClick={() => send({ t: "search", spot: sel.id })}>
+                🔍 探索({ghostCost(room, sel.id)})
               </QBtn>
             </>
           ) : (
@@ -402,6 +408,7 @@ function QuickActions({
   }
 
   const tools = ghostTurn && g && !escape && ["roll", "move", "hide"].includes(step) ? g.tools : [];
+  const used = (k: string) => room.usedThisRound.includes(`ghost-tool-${k}`);
   return (
     <div className={box}>
       <p className="font-bold text-gold">
@@ -409,9 +416,10 @@ function QuickActions({
         {step !== "roll" && budget > 0 && <span className="ml-1 text-white/60">残り{budget}</span>}
       </p>
       {body}
-      {tools.map((k, i) => (
-        <QBtn key={`${k}-${i}`} onClick={() => send({ t: "gtool", kind: k })}>
-          {GHOST_TOOLS[k].icon} {GHOST_TOOLS[k].name}
+      {tools.map((t) => (
+        <QBtn key={t.kind} disabled={used(t.kind)} onClick={() => send({ t: "gtool", kind: t.kind })}>
+          {GHOST_TOOLS[t.kind].icon} {GHOST_TOOLS[t.kind].name}
+          {GHOST_TOOLS[t.kind].uses > 1 && ` 残${t.uses}`}
         </QBtn>
       ))}
       {error && <p className="text-red-400">{error}</p>}
@@ -437,18 +445,22 @@ function GhostStatus({ room, canUse, send }: { room: ClientRoom; canUse: boolean
         <p className="text-xs text-white/40">居場所: {g.spot ? spotName(g.spot) : locName(g.loc)}</p>
         {g.tools.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {g.tools.map((k, i) => (
-              <button
-                key={`${k}-${i}`}
-                disabled={!canUse}
-                title={GHOST_TOOLS[k].desc}
-                onClick={() => send({ t: "gtool", kind: k })}
-                className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs font-bold enabled:hover:bg-white/10 disabled:opacity-60"
-              >
-                {GHOST_TOOLS[k].icon} {GHOST_TOOLS[k].name}
-                {canUse && <span className="ml-1 text-violet">使う</span>}
-              </button>
-            ))}
+            {g.tools.map((t) => {
+              const ready = canUse && !room.usedThisRound.includes(`ghost-tool-${t.kind}`);
+              return (
+                <button
+                  key={t.kind}
+                  disabled={!ready}
+                  title={GHOST_TOOLS[t.kind].desc}
+                  onClick={() => send({ t: "gtool", kind: t.kind })}
+                  className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs font-bold enabled:hover:bg-white/10 disabled:opacity-60"
+                >
+                  {GHOST_TOOLS[t.kind].icon} {GHOST_TOOLS[t.kind].name}
+                  {GHOST_TOOLS[t.kind].uses > 1 && <span className="ml-1 text-white/50">残{t.uses}</span>}
+                  {ready && <span className="ml-1 text-violet">使う</span>}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -836,6 +848,18 @@ function FoundPopup({ room }: { room: ClientRoom }) {
         place={place}
         note={isGhost ? "2つ目の品の力で、人間全員をこの部屋へ集めた。" : "幽霊が2つ目の品を手に入れた。人間は全員この部屋へ強制移動。"}
         tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "candle") {
+    return (
+      <InfoPopup
+        icon={<span className="gh-flicker inline-block">🕯️</span>}
+        title="蝋燭が灯っている…"
+        place={place}
+        note="人間が灯したマッチと蝋燭。この部屋で探索するには、探索コストが+2必要。"
+        tone="bad"
         onClose={close}
       />
     );

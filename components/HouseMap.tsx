@@ -209,7 +209,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
                   r={r}
                   bell={placed?.bells.some((b) => b.room === loc)}
                   holy={placed?.holy.some((h) => h.room === loc && room.ghostTurns < h.until)}
-                  candle={placed?.candles.includes(loc as RoomId)}
+                  candle={placed ? placed.candles.includes(loc as RoomId) : room.ghostCandles.includes(loc as RoomId)}
                   hidden={know?.hiddenRoom === loc ? "known" : room.hidden?.room === loc ? "found" : null}
                   locked={room.lock?.room === loc && room.ghostTurns < room.lock.until}
                 />
@@ -264,7 +264,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
                   {/* search cost for this viewer's side */}
                   <circle cx={rect.x + 15} cy={rect.y + rect.h - 15} r="11" fill="#ffcf5a" />
                   <text x={rect.x + 15} y={rect.y + rect.h - 9.5} textAnchor="middle" fontSize="16" fontWeight="800" fill="#1d1b3a">
-                    {room.viewerSide === "ghost" ? s.cost : humanCost}
+                    {room.viewerSide === "ghost" ? s.cost + (room.ghostCandles.includes(r) ? 2 : 0) : humanCost}
                   </text>
                   {room.known[s.id]?.type === "empty" && (
                     <text x={rect.x + rect.w / 2 + 4} y={rect.y + rect.h - 7} textAnchor="middle" fontSize="22" fontWeight="900" fill="#ef4444">

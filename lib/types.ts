@@ -63,8 +63,8 @@ export interface GhostState {
   revived: boolean;
   /** What the ghost thinks it holds (fakes look real to it). */
   held: GhostItemName[];
-  /** Ghost tools in hand. */
-  tools: GhostToolKind[];
+  /** Ghost tools in hand, with uses left. */
+  tools: { kind: GhostToolKind; uses: number }[];
   startSpot: string;
 }
 
@@ -126,7 +126,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle";
   /** Damage dealt, for a hit. */
   amount?: number;
 }
@@ -168,6 +168,8 @@ export interface RoomState {
   ghostKnow: Record<string, KnownSpot>;
   /** Every spot the ghost has ever searched (for the 巫女). */
   ghostSearchedAll: string[];
+  /** Candle rooms the ghost has walked into (so it knows about them). */
+  ghostCandles: RoomId[];
   turn: TurnState;
   escape: EscapeState | null;
   /** Normal ghost turns completed. */
@@ -225,6 +227,8 @@ export interface ClientRoom {
   /** Spot contents this viewer knows. */
   known: Record<string, KnownSpot>;
   humanKnow: HumanKnowledge | null;
+  /** The ghost's view: candle rooms it knows of. */
+  ghostCandles: RoomId[];
   hidden: RoomState["hidden"];
   lock: RoomState["lock"];
   ghostTurns: number;

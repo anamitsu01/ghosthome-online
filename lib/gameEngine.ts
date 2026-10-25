@@ -104,6 +104,7 @@ function emptyGame(): Pick<
   | "humanKnow"
   | "ghostKnow"
   | "ghostSearchedAll"
+  | "ghostCandles"
   | "turn"
   | "escape"
   | "ghostTurns"
@@ -126,6 +127,7 @@ function emptyGame(): Pick<
     humanKnow: { spots: {}, hiddenRoom: null, hiddenFound: false, ghostSearched: [] },
     ghostKnow: {},
     ghostSearchedAll: [],
+    ghostCandles: [],
     turn: { round: 0, side: "ghost", hunter: 0, step: "roll", dice: [], budget: 0, searched: false, resolveSpot: null, pendingEscape: false, path: [] },
     escape: null,
     ghostTurns: 0,
@@ -384,6 +386,12 @@ function ghostDice(room: RoomState): number {
   return room.ghost.revived ? 3 : 2;
 }
 
+/** A candle in the room makes every search there cost 2 more for the ghost. */
+function ghostSearchCost(room: RoomState, spotId: string): number {
+  const s = SPOT[spotId];
+  return s.cost + (room.placed.candles.includes(s.room) ? 2 : 0);
+}
+
 /** Hit points the ghost can have now: 1, +1 from the first item, +1 for the full revival. */
 function ghostMaxHp(room: RoomState): number {
   const g = room.ghost;
@@ -436,8 +444,6 @@ export function ghostStepCost(room: RoomState, to: string, afterSearch: boolean)
   if (!isHall(target.loc) && aliveHunters(room).some((h) => h.character === "scientist" && h.loc === target.loc)) {
     cost += 2;
   }
-  // A candle makes leaving its room harder.
-  if (!isHall(g.loc) && room.placed.candles.includes(g.loc)) cost += 2;
   return { ...target, cost };
 }
 
@@ -449,6 +455,10 @@ function ghostArrive(room: RoomState, loc: LocId, spot: string | null, canKill: 
   g.spot = spot;
   if (room.turn.path[room.turn.path.length - 1] !== loc) room.turn.path.push(loc);
 
+  if (entered && !isHall(loc) && room.placed.candles.includes(loc)) {
+    if (!room.ghostCandles.includes(loc)) room.ghostCandles.push(loc);
+    log(room, "ghost", `🕯️ ${ROOM[loc].name}には蝋燭が灯っている。ここで探索するにはコストが+2必要`, "warn", { loc, event: "candle" });
+  }
   if (entered && !isHall(loc)) {
     for (const b of room.placed.bells) {
       if (b.room !== loc) continue;
@@ -525,7 +535,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   const spot = SPOT[spotId];
   if (room.turn.searched) throw new GameError("探索は1ターンに1回です");
   if (!spot || spot.room !== g.loc) throw new GameError("今いる部屋の潜伏場所しか探索できません");
-  const cost = spot.cost;
+  const cost = ghostSearchCost(room, spotId);
   if (cost > room.turn.budget) throw new GameError(`移動力が足りません(探索コスト ${cost})`);
   room.turn.budget -= cost;
   room.turn.searched = true;
@@ -546,7 +556,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   if (content?.type === "tool") {
     room.spots[spotId] = null;
     room.ghostKnow[spotId] = { type: "empty" };
-    g.tools.push(content.kind);
+    g.tools.push({ kind: content.kind, uses: GHOST_TOOLS[content.kind].uses });
     log(room, "ghost", `${spotName(spotId)}で${GHOST_TOOLS[content.kind].name}を手に入れた!`, "good", { spot: spotId, found: known(content) });
     return;
   }
@@ -611,7 +621,10 @@ function finishGhostTurn(room: RoomState): void {
 
 function applyGhostTool(room: RoomState, kind: GhostToolKind): void {
   const g = room.ghost;
-  if (!g.tools.includes(kind)) throw new GameError("その道具は持っていません");
+  const tool = g.tools.find((t) => t.kind === kind);
+  if (!tool) throw new GameError("その道具は持っていません");
+  const usedKey = `ghost-tool-${kind}`;
+  if (room.usedThisRound.includes(usedKey)) throw new GameError("この道具はこのターンもう使いました");
   if (kind === "scrap") {
     if (g.hp >= ghostMaxHp(room)) throw new GameError("体力は満タンです");
     g.hp += 1;
@@ -621,9 +634,14 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind): void {
     if (!targets.length) throw new GameError("呪える人間がいません");
     const h = pick(targets);
     h.stunned = true;
-    log(room, "all", `🪦 地縛霊の石板の呪い! ${hunterName(h)}は次のターン動けない`, "bad", { loc: h.loc, event: "curse" });
+    log(room, "all", `🪦 地縛霊の石板の呪い! ${hunterName(h)}は次のターン動けない(石板の残り${tool.uses - 1}回)`, "bad", {
+      loc: h.loc,
+      event: "curse",
+    });
   }
-  g.tools.splice(g.tools.indexOf(kind), 1);
+  room.usedThisRound.push(usedKey);
+  tool.uses -= 1;
+  if (tool.uses <= 0) g.tools = g.tools.filter((t) => t !== tool);
 }
 
 function ghostAction(room: RoomState, action: Action): void {
@@ -1147,6 +1165,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
     placed: isHuman ? room.placed : null,
     known,
     humanKnow: isHuman ? room.humanKnow : null,
+    ghostCandles: isGhost ? room.ghostCandles : [],
     hidden: ended ? room.hidden : null,
     lock: isGhost ? room.lock : null,
     ghostTurns: room.ghostTurns,
@@ -1179,14 +1198,16 @@ export function botAct(room: RoomState, actorId: string): RoomState {
   const t = room.turn;
   if (t.side === "ghost") {
     const g = room.ghost;
-    if (g.tools.includes("tablet") && Math.random() < 0.3) return step({ t: "gtool", kind: "tablet" });
-    if (g.tools.includes("scrap") && g.hp < ghostMaxHp(room)) return step({ t: "gtool", kind: "scrap" });
+    const ready = (k: GhostToolKind) =>
+      ["roll", "move", "hide"].includes(t.step) && g.tools.some((x) => x.kind === k) && !room.usedThisRound.includes(`ghost-tool-${k}`);
+    if (ready("tablet") && aliveHunters(room).some((h) => !h.stunned) && Math.random() < 0.3) return step({ t: "gtool", kind: "tablet" });
+    if (ready("scrap") && g.hp < ghostMaxHp(room)) return step({ t: "gtool", kind: "scrap" });
     if (t.step === "roll") return step({ t: "roll" });
     if (t.step === "forced") return step({ t: "forced", room: pick(FORCED_ROOMS) });
     if (t.step === "warp") return step({ t: "warp", spot: pick(SPOTS.filter((s) => !holyBlocked(room, s.room))).id });
     if (t.step === "move") {
       const here = SPOTS.filter((s) => s.room === room.ghost.loc);
-      const affordable = here.filter((s) => s.cost <= t.budget);
+      const affordable = here.filter((s) => ghostSearchCost(room, s.id) <= t.budget);
       if (affordable.length && Math.random() < 0.55) return step({ t: "search", spot: pick(affordable).id });
       return ghostWander(room, t.budget, true) ?? step({ t: "end" });
     }
