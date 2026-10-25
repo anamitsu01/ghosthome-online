@@ -73,6 +73,7 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   room.ghost.hp = 2;
   room.ghost.collected = 1;
   room.spots["toilet-0"] = null;
+  room.hunters[0].items = []; // nothing to leave behind, so the search ends the turn at once
   toHunters(room);
   act(room, "host", { t: "move", loc: "toilet" });
   act(room, "host", { t: "search", spot: "toilet-0" });
