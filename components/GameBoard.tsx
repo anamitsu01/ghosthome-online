@@ -917,10 +917,10 @@ function FoundPopup({ room }: { room: ClientRoom }) {
     return (
       <InfoPopup
         icon="🕯"
-        title="霊媒師の霊視"
+        title={isGhost ? "霊媒師に霊視された!" : "霊媒師の霊視"}
         place={place}
-        note="幽霊は今この部屋のどこかにいる。"
-        tone="good"
+        note={isGhost ? "人間にいる部屋を知られた。" : "幽霊は今この部屋のどこかにいる。"}
+        tone={isGhost ? "bad" : "good"}
         onClose={close}
       />
     );

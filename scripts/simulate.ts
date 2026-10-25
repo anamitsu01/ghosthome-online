@@ -421,7 +421,9 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   const sight = room.logs.at(-1)!;
   assert.equal(sight.event, "medium");
   assert.equal(sight.loc, "study");
-  assert.equal(sight.to, "human");
+  assert.equal(sight.to, "ghost", "the ghost is told, like 検知鬼くん");
+  assert.equal(room.logs.at(-2)!.to, "human");
+  assert.equal(room.logs.at(-2)!.loc, "study");
   assert.throws(() => act(room, "host", { t: "medium" }), /もう使いました/);
   act(room, "host", { t: "end" });
   // イカサマ師: never a 1.

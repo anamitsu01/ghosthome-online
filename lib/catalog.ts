@@ -104,7 +104,7 @@ export interface CharacterDef {
 }
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
-  medium: { id: "medium", name: "霊媒師", icon: "霊", color: "#a78bfa", desc: "1ゲームに1度、自分のターン中(サイコロの前でも後でも)に幽霊のいる部屋が分かる。" },
+  medium: { id: "medium", name: "霊媒師", icon: "霊", color: "#a78bfa", desc: "1ゲームに1度、自分のターン中(サイコロの前でも後でも)に幽霊のいる部屋が分かる。使ったことは幽霊にも伝わる。" },
   miko: { id: "miko", name: "巫女", icon: "巫", color: "#f87171", desc: "部屋に入ると、その部屋で幽霊が探索したことのある潜伏場所が分かる。" },
   scientist: { id: "scientist", name: "科学者", icon: "科", color: "#34d399", desc: "科学者のいる部屋に幽霊が入るとき、移動コスト+2。" },
   painter: { id: "painter", name: "絵描き", icon: "絵", color: "#fbbf24", desc: "アイテムを3つまで持てる。" },

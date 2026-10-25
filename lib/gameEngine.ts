@@ -885,6 +885,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       if (h.mediumUsed) throw new GameError("霊視はもう使いました");
       h.mediumUsed = true;
       log(room, "human", `🕯 霊媒師の霊視: 幽霊は ${locName(room.ghost.loc)} にいる!`, "good", { loc: room.ghost.loc, event: "medium" });
+      log(room, "ghost", `🕯 霊媒師に霊視された! ${locName(room.ghost.loc)}にいることを知られた`, "bad", { loc: room.ghost.loc, event: "medium" });
       return;
     }
     case "psychic": {
