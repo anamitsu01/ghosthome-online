@@ -35,6 +35,7 @@ import {
   type Hunter,
   type Item,
   type KnownSpot,
+  type LogEntry,
   type Player,
   type RoomSettings,
   type RoomState,
@@ -203,7 +204,7 @@ function log(
   to: Audience,
   text: string,
   tone: Tone = "info",
-  where: { loc?: LocId; spot?: string; found?: KnownSpot; event?: "revive" } = {}
+  where: Pick<LogEntry, "loc" | "spot" | "found" | "event" | "amount"> = {}
 ): void {
   room.logs.push({ seq: ++room.logSeq, to, text, tone, ...where });
   room.logs = room.logs.slice(-LOGS_KEPT);
@@ -356,9 +357,13 @@ function over(room: RoomState): boolean {
 }
 
 /** Damage to the ghost. Returns true if that finished it. */
-function damageGhost(room: RoomState, amount: number, cause: string): boolean {
+function damageGhost(room: RoomState, amount: number, cause: string, extra: { spot?: string; event?: LogEntry["event"] } = {}): boolean {
   room.ghost.hp -= amount;
-  log(room, "all", `${cause} 幽霊に${amount}ダメージ!`, "good", room.ghost.revived ? { spot: room.ghost.spot ?? undefined } : {});
+  log(room, "all", `${cause} 幽霊に${amount}ダメージ!`, "good", {
+    ...(room.ghost.revived ? { spot: room.ghost.spot ?? undefined } : {}),
+    ...extra,
+    amount,
+  });
   if (room.ghost.hp <= 0) {
     endGame(room, "human", "幽霊は消え去った…人間側の勝利!");
     return true;
@@ -514,9 +519,9 @@ function ghostSearch(room: RoomState, spotId: string): void {
   const near = hearsFrom(spot.room);
   const sameRoom = aliveHunters(room).some((h) => h.loc === spot.room);
   if (sameRoom) {
-    log(room, "human", `👻 気配! ${spotName(spotId)}で何かが探っている`, "warn", { spot: spotId });
+    log(room, "human", `👻 気配! ${spotName(spotId)}で何かが探っている`, "warn", { spot: spotId, event: "noise" });
   } else if (aliveHunters(room).some((h) => near.includes(h.loc))) {
-    log(room, "human", `👻 気配… ${ROOM[spot.room].name}で何かが動いた`, "warn", { loc: spot.room });
+    log(room, "human", `👻 気配… ${ROOM[spot.room].name}で何かが動いた`, "warn", { loc: spot.room, event: "noise" });
   }
 
   const content = room.spots[spotId];
@@ -707,14 +712,19 @@ function arriveHunter(room: RoomState, h: Hunter, loc: LocId): void {
     room.turn.path.push(loc);
   }
   if (isHall(loc)) return;
-  if (room.hidden && room.hidden.room === loc && has(h, "flashlight") && !room.humanKnow.hiddenFound) {
+  // The flashlight finds the hidden item and is used up: the item takes its place in hand.
+  const flashlight = h.items.find((i) => i.kind === "flashlight");
+  if (room.hidden && room.hidden.room === loc && flashlight) {
+    const kind = room.hidden.kind;
+    h.items[h.items.indexOf(flashlight)] = newItem(room, kind);
+    room.hidden = null;
     room.humanKnow.hiddenFound = true;
-    room.humanKnow.hiddenRoom = loc;
-    log(room, "human", `🔦 懐中電灯が${ROOM[loc].name}に隠された${ITEMS[room.hidden.kind].name}を照らし出した!(探索で取れる)`, "good", {
+    room.humanKnow.hiddenRoom = null;
+    log(room, "human", `🔦 懐中電灯が${ROOM[loc].name}に隠された${ITEMS[kind].name}を照らし出した! ${hunterName(h)}が手に入れた(懐中電灯は失われた)`, "good", {
       loc,
-      found: { type: "human", kind: room.hidden.kind },
+      found: { type: "human", kind },
     });
-    if (room.ghost.loc === loc) log(room, "ghost", `${hunterName(h)}が${ROOM[loc].name}で何かを見つけたようだ…`, "warn", { loc });
+    if (room.ghost.loc === loc) log(room, "ghost", `${hunterName(h)}が${ROOM[loc].name}で${ITEMS[kind].name}を手に入れた!`, "bad", { loc });
   }
   if (h.character === "miko") {
     const found = room.ghostSearchedAll.filter((s) => SPOT[s].room === loc && !room.humanKnow.ghostSearched.includes(s));
@@ -760,9 +770,6 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
     }
     case "search":
       hunterSearch(room, h, action.spot);
-      return;
-    case "hidden":
-      takeHidden(room, h);
       return;
     case "resolve":
       resolveSearch(room, h, action.take, action.leave);
@@ -826,7 +833,7 @@ function hunterSearch(room: RoomState, h: Hunter, spotId: string): void {
       log(room, "all", `${hunterName(h)}は幽霊の前に立ったが、傷つける武器がない…`, "warn", { spot: spotId });
     } else {
       if (!room.ghost.revived) log(room, "all", `❗ ${hunterName(h)}が${spotName(spotId)}で幽霊を見つけた!`, "good", { spot: spotId });
-      if (damageGhost(room, dmg, `${hunterName(h)}の一撃で`)) return;
+      if (damageGhost(room, dmg, `${hunterName(h)}の一撃で`, { spot: spotId, event: "hit" })) return;
       t.pendingEscape = true;
     }
   }
@@ -873,18 +880,6 @@ function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: strin
   room.humanKnow.spots[spotId] = known(room.spots[spotId]);
   t.step = "move";
   t.resolveSpot = null;
-  nextHunter(room);
-}
-
-function takeHidden(room: RoomState, h: Hunter): void {
-  const t = room.turn;
-  if (!room.hidden || !room.humanKnow.hiddenFound || room.hidden.room !== h.loc) throw new GameError("ここに見つけた隠しアイテムはありません");
-  if (h.items.length >= capacity(h)) throw new GameError("持ち物がいっぱいです(仲間に渡すか置いてから)");
-  t.searched = true;
-  h.items.push(newItem(room, room.hidden.kind));
-  log(room, "human", `${hunterName(h)}は${ITEMS[room.hidden.kind].name}を手に入れた!`, "good", { loc: h.loc });
-  if (room.ghost.loc === h.loc) log(room, "ghost", `${hunterName(h)}が${ITEMS[room.hidden.kind].name}を手に入れた!`, "bad", { loc: h.loc });
-  room.hidden = null;
   nextHunter(room);
 }
 
@@ -1141,9 +1136,6 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     return step({ t: "resolve", take: false, leave: null });
   }
   if (t.step === "roll") return step({ t: "roll" });
-  if (room.hidden && room.humanKnow.hiddenFound && room.hidden.room === h.loc && h.items.length < capacity(h)) {
-    return step({ t: "hidden" });
-  }
   const here = SPOTS.filter((s) => s.room === h.loc && searchCost(room, s.id) <= t.budget);
   if (!isHall(h.loc) && here.length && (t.budget < MOVE_COST || Math.random() < 0.4)) {
     return step({ t: "search", spot: pick(here).id });

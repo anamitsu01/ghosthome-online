@@ -8,7 +8,7 @@ import type { Action, ClientHunter, ClientRoom, Item, LogEntry } from "@/lib/typ
 import HouseMap, { ghostColor } from "./HouseMap";
 import GhostSprite from "./GhostSprite";
 import { DICE_RESULT_MS, DiceResult, DiceRow, RollButton } from "./Dice";
-import { RevivePopup, VictoryBanner } from "./Effects";
+import { HitPopup, NoisePopup, RevivePopup, VictoryBanner } from "./Effects";
 
 type ActFn = <E extends keyof ClientToServerEvents>(
   event: E,
@@ -383,7 +383,6 @@ function HunterControls({
     return <ResolvePanel room={room} hunter={hunter} spotId={turn.resolveSpot} send={send} />;
   }
 
-  const hiddenHere = room.humanKnow?.hiddenFound && room.humanKnow.hiddenRoom === hunter.loc;
   const cost = (id: string) => (ghost?.revived && ghost.spot === id ? 0 : Math.max(0, SPOT[id].cost - 1));
 
   return (
@@ -422,11 +421,6 @@ function HunterControls({
               ))}
           </div>
         </div>
-      )}
-      {hiddenHere && (
-        <Btn primary onClick={() => send({ t: "hidden" })}>
-          ✨ 隠しアイテムを取る(探索・コスト0)
-        </Btn>
       )}
 
       <ItemList hunter={hunter} room={room} send={send} />
@@ -687,7 +681,10 @@ function FoundPopup({ room }: { room: ClientRoom }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [entry]);
-  if (entry?.event === "revive") return <RevivePopup room={room} spot={entry.spot} onClose={() => setSeen(entry.seq)} />;
+  const close = () => entry && setSeen(entry.seq);
+  if (entry?.event === "revive") return <RevivePopup room={room} spot={entry.spot} onClose={close} />;
+  if (entry?.event === "hit") return <HitPopup room={room} spot={entry.spot} amount={entry.amount ?? 1} text={entry.text} onClose={close} />;
+  if (entry?.event === "noise") return <NoisePopup spot={entry.spot} loc={entry.loc} onClose={close} />;
   if (!entry?.found) return null;
   const f = entry.found;
   if (f.type === "empty") return null;

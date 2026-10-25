@@ -47,7 +47,7 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   crystal: { kind: "crystal", name: "水晶玉", icon: "🔮", use: "self", desc: "次の幽霊ターンのサイコロの目が見える。何度でも使える。" },
   sword: { kind: "sword", name: "勾玉の剣", icon: "🗡️", use: "passive", desc: "完全復活した幽霊のいる場所を探索すると1ダメージ。" },
   gambler: { kind: "gambler", name: "ギャンブラーのサイコロ", icon: "🎲", use: "self", uses: 3, desc: "使った次の自分のターン、サイコロが1個増える。3回まで。" },
-  flashlight: { kind: "flashlight", name: "懐中電灯", icon: "🔦", use: "passive", desc: "持って隠しアイテムのある部屋に入ると見つかる(取るには探索・コスト0)。" },
+  flashlight: { kind: "flashlight", name: "懐中電灯", icon: "🔦", use: "passive", desc: "持って隠しアイテムのある部屋に入ると、懐中電灯と引き換えにその場で隠しアイテムを手に入れる。" },
   candle: { kind: "candle", name: "マッチと蝋燭", icon: "🕯️", use: "room", desc: "今いる部屋に設置。幽霊がその部屋で探索するコストが+2(ゲーム終了まで)。使い捨て。" },
   mirror: { kind: "mirror", name: "手鏡", icon: "🪞", use: "spot", retrievable: true, desc: "潜伏場所に設置。幽霊がそこに潜伏すると、次の幽霊ターンはその部屋から出られない。" },
   redbeads: { kind: "redbeads", name: "赤い数珠", icon: "📿", use: "passive", desc: "青い数珠と両方持っていればサイコロ+1。" },
@@ -98,7 +98,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   painter: { id: "painter", name: "絵描き", icon: "🎨", color: "#fbbf24", desc: "アイテムを3つまで持てる。" },
   psychic: { id: "psychic", name: "超能力者", icon: "🌀", color: "#60a5fa", desc: "1ゲームに1度、サイコロを振る前に好きな部屋・廊下へワープできる。" },
   magician: { id: "magician", name: "手品師", icon: "🎩", color: "#f472b6", desc: "幽霊アイテムの偽物を1つ持って始まる。探索した場所に置ける。" },
-  jujutsu: { id: "jujutsu", name: "呪術師", icon: "🪬", color: "#fb923c", desc: "隠しアイテムのある部屋が分かる(取るには懐中電灯が必要)。" },
+  jujutsu: { id: "jujutsu", name: "呪術師", icon: "🪬", color: "#fb923c", desc: "隠しアイテムのある部屋が分かる(手に入れるには懐中電灯を持ってその部屋へ)。" },
 };
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 

@@ -113,15 +113,17 @@ export interface LogEntry {
   spot?: string;
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
-  /** A big moment shown as a popup to everyone. */
-  event?: "revive";
+  /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard. */
+  event?: "revive" | "hit" | "noise";
+  /** Damage dealt, for a hit. */
+  amount?: number;
 }
 
 export interface HumanKnowledge {
   spots: Record<string, KnownSpot>;
-  /** Room of the hidden item, once known (呪術師 or flashlight). */
+  /** Room of the hidden item, while it is known (呪術師) and still there. */
   hiddenRoom: RoomId | null;
-  /** Its kind, once found with the flashlight. */
+  /** The flashlight has already turned it up. */
   hiddenFound: boolean;
   /** Spots the ghost has searched, as revealed by the 巫女. */
   ghostSearched: string[];
@@ -225,7 +227,6 @@ export type Action =
   | { t: "move"; loc: LocId }
   | { t: "gmove"; to: string }
   | { t: "search"; spot: string }
-  | { t: "hidden" }
   | { t: "resolve"; take: boolean; leave: string | null }
   | { t: "end" }
   | { t: "warp"; spot: string }

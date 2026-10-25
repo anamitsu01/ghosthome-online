@@ -187,10 +187,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes }: M
                   bell={placed?.bells.some((b) => b.room === loc)}
                   holy={placed?.holy.some((h) => h.room === loc && room.ghostTurns < h.until)}
                   candle={placed?.candles.includes(loc as RoomId)}
-                  hidden={
-                    (know?.hiddenRoom === loc && (know.hiddenFound ? "found" : "known")) ||
-                    (room.hidden?.room === loc ? "found" : null)
-                  }
+                  hidden={know?.hiddenRoom === loc ? "known" : room.hidden?.room === loc ? "found" : null}
                   locked={room.lock?.room === loc && room.ghostTurns < room.lock.until}
                 />
               )}

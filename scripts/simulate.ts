@@ -222,6 +222,19 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
+  // The flashlight turns up the hidden item on entering its room and is traded for it, same turn.
+  const room = newGame();
+  room.hidden = { kind: "spear", room: "toilet" };
+  room.hunters[0].items = [{ id: "f", kind: "flashlight" }, { id: "b", kind: "bell" }];
+  toHunters(room);
+  act(room, "host", { t: "move", loc: "toilet" });
+  assert.deepEqual(room.hunters[0].items.map((i) => i.kind), ["spear", "bell"]);
+  assert.equal(room.hidden, null);
+  assert.equal(room.turn.hunter, 0, "the turn goes on");
+  assert.equal(room.logs.at(-1)!.found?.type, "human");
+}
+
+{
   // Hidden view: humans don't see where the ghost is, the ghost doesn't see human items.
   const room = newGame();
   const human = viewFor(room, "host");
