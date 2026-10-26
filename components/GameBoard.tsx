@@ -724,6 +724,8 @@ function Transfer({ room, hunter, send }: { room: ClientRoom; hunter: ClientHunt
 interface HandThing {
   id: string;
   label: string;
+  /** A talisman or hand mirror: can be set here as a trap instead of just put down. */
+  trap?: boolean;
 }
 
 /**
@@ -746,7 +748,11 @@ function ResolveModal({
   const ghostSide = !hunter;
   const hand: HandThing[] = ghostSide
     ? (room.ghost?.tools ?? []).map((t) => ({ id: t.kind, label: `${GHOST_TOOLS[t.kind].icon} ${GHOST_TOOLS[t.kind].name}` }))
-    : (hunter.items ?? []).map((i) => ({ id: i.id, label: `${ITEMS[i.kind].icon} ${ITEMS[i.kind].name}` }));
+    : (hunter.items ?? []).map((i) => ({
+        id: i.id,
+        label: `${ITEMS[i.kind].icon} ${ITEMS[i.kind].name}`,
+        trap: i.kind === "ofuda" || i.kind === "mirror",
+      }));
   const limit = ghostSide ? GHOST_TOOL_LIMIT : capacity(hunter);
   const found =
     ghostSide && k?.type === "tool"
@@ -754,9 +760,19 @@ function ResolveModal({
       : !ghostSide && k?.type === "human"
         ? { icon: ITEMS[k.kind].icon, name: ITEMS[k.kind].name }
         : null;
-  const [stage, setStage] = useState<"take" | "ask" | "pick" | "swap">(found ? "take" : "ask");
+  const [stage, setStage] = useState<"take" | "ask" | "pick" | "swap" | "trap">(found ? "take" : "ask");
   const [taking, setTaking] = useState(false);
-  const resolve = (take: boolean, leave: string | null) => send({ t: "resolve", take, leave });
+  // A talisman / mirror chosen to let go of: ask whether to set it here first.
+  const [trapItem, setTrapItem] = useState<{ thing: HandThing; from: "pick" | "swap" } | null>(null);
+  const resolve = (take: boolean, leave: string | null, setTrap = false) => send({ t: "resolve", take, leave, setTrap });
+
+  function choose(thing: HandThing, from: "pick" | "swap") {
+    if (thing.trap) {
+      setTrapItem({ thing, from });
+      return setStage("trap");
+    }
+    return resolve(from === "swap" || taking, thing.id);
+  }
 
   function take() {
     if (hand.length >= limit) return setStage("swap");
@@ -787,13 +803,26 @@ function ResolveModal({
         <Btn onClick={() => resolve(taking, null)}>おかない</Btn>
       </>
     );
+  } else if (stage === "trap" && trapItem) {
+    const { thing, from } = trapItem;
+    const take = from === "swap" || taking;
+    title = `${thing.label}をこの潜伏場所に使う?`;
+    body = (
+      <>
+        <Btn primary onClick={() => resolve(take, thing.id, true)}>
+          使う(ここに仕掛ける)
+        </Btn>
+        <Btn onClick={() => resolve(take, thing.id)}>使わずに置く</Btn>
+        <Btn onClick={() => setStage(from)}>もどる</Btn>
+      </>
+    );
   } else {
     const swap = stage === "swap";
     title = swap ? `持てるのは${limit}つまで。代わりにどれを置く?` : "どれを置く?";
     body = (
       <>
         {hand.map((h) => (
-          <Btn key={h.id} primary onClick={() => resolve(swap || taking, h.id)}>
+          <Btn key={h.id} primary onClick={() => choose(h, swap ? "swap" : "pick")}>
             {h.label}
           </Btn>
         ))}

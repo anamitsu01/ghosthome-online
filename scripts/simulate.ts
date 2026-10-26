@@ -498,6 +498,27 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
+  // Full hand: swapping out a talisman can set it on the searched spot as a trap.
+  const room = newGame();
+  room.ghost.loc = "attic";
+  room.ghost.spot = "attic-0";
+  room.spots["toilet-1"] = { type: "human", item: { id: "kn", kind: "kenchi", uses: 3 } };
+  room.hunters[0].items = [
+    { id: "of", kind: "ofuda" },
+    { id: "bl", kind: "bell" },
+    ...(room.hunters[0].character === "painter" ? [{ id: "dl", kind: "doll" as const }] : []),
+  ];
+  toHunters(room);
+  act(room, "host", { t: "move", loc: "toilet" });
+  act(room, "host", { t: "search", spot: "toilet-1" });
+  act(room, "host", { t: "resolve", take: true, leave: "of", setTrap: true });
+  assert.ok(room.hunters[0].items.some((i) => i.kind === "kenchi"));
+  assert.ok(!room.hunters[0].items.some((i) => i.kind === "ofuda"));
+  assert.deepEqual(room.placed.ofuda.map((o) => o.spot), ["toilet-1"]);
+  assert.equal(room.spots["toilet-1"], null, "the spot itself is empty; the talisman is set on it");
+}
+
+{
   // Hidden view: humans don't see where the ghost is, the ghost doesn't see human items.
   const room = newGame();
   const human = viewFor(room, "host");

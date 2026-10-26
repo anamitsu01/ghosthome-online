@@ -905,7 +905,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       hunterSearch(room, h, action.spot);
       return;
     case "resolve":
-      resolveSearch(room, h, action.take, action.leave);
+      resolveSearch(room, h, action.take, action.leave, !!action.setTrap);
       return;
     case "use":
       applyItem(room, h, action.item, action.spot);
@@ -992,7 +992,7 @@ function hunterSearch(room: RoomState, h: Hunter, spotId: string): void {
   }
 }
 
-function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: string | null): void {
+function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: string | null, setTrap = false): void {
   const t = room.turn;
   if (t.step !== "resolve" || !t.resolveSpot) throw new GameError("決めることはありません");
   const spotId = t.resolveSpot;
@@ -1009,7 +1009,15 @@ function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: strin
       throw new GameError("取らないなら置くこともできません");
     }
   }
-  if (leave) {
+  if (leave && setTrap) {
+    // A talisman or mirror let go of here is set on this spot as a trap.
+    if (leave.kind !== "ofuda" && leave.kind !== "mirror") throw new GameError("仕掛けられるのは落魂札と手鏡だけです");
+    h.items = h.items.filter((i) => i !== leave);
+    room.usedThisRound.push(leave.id);
+    if (leave.kind === "ofuda") room.placed.ofuda.push({ spot: spotId, item: leave });
+    else room.placed.mirrors.push({ spot: spotId, item: leave });
+    log(room, "human", `${leave.kind === "ofuda" ? "📜" : "🪞"} ${spotName(spotId)}に${ITEMS[leave.kind].name}を仕掛けた`, "info", { spot: spotId });
+  } else if (leave) {
     if (room.spots[spotId]) throw new GameError("そこにはもう物があります");
     h.items = h.items.filter((i) => i !== leave);
     room.spots[spotId] =

@@ -254,8 +254,11 @@ export type Action =
   | { t: "move"; loc: LocId }
   | { t: "gmove"; to: string }
   | { t: "search"; spot: string }
-  /** After a search: take what was found (swapping if `leave` is given), and/or leave something in the spot. */
-  | { t: "resolve"; take: boolean; leave: string | null }
+  /**
+   * After a search: take what was found (swapping if `leave` is given), and/or leave something in the spot.
+   * `setTrap`: a talisman or hand mirror being left is set right there as a trap instead of just put down.
+   */
+  | { t: "resolve"; take: boolean; leave: string | null; setTrap?: boolean }
   | { t: "end" }
   | { t: "warp"; spot: string }
   | { t: "gtool"; kind: GhostToolKind; door?: string }
