@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, GHOST_TOOLS, ITEMS } from "@/lib/catalog";
 import {
   LAYOUT,
@@ -298,10 +298,9 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
             })
           )}
 
-        {/* hunters */}
-        {locs.map((loc) => {
+        {/* hunters: one list for the floor, so a token keeps its identity (and walks) when it changes place */}
+        {locs.flatMap((loc) => {
           const here = room.hunters.filter((h) => h.loc === loc);
-          if (!here.length) return null;
           const r = LAYOUT[loc];
           const y = isHall(loc) ? r.y + r.h - 26 : r.y + r.h - 18;
           const x0 = isHall(loc) ? r.x + 28 : r.x + r.w - 20 - (here.length - 1) * 32;
@@ -309,7 +308,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
             const c = CHARACTERS[h.character];
             const active = room.turn?.side === "human" && room.turn.hunter === h.slot && !room.escape;
             return (
-              <g key={h.slot} transform={`translate(${x0 + i * 32} ${y})`} opacity={h.alive ? 1 : 0.35} pointerEvents="none">
+              <HunterToken key={h.slot} x={x0 + i * 32} y={y} loc={loc} dim={!h.alive}>
                 {active && <circle r="19" fill="none" stroke="#ffe08a" strokeWidth="2.5" className="gh-breathe" />}
                 <circle r="15" fill={c.color} stroke="#0b0918" strokeWidth="2" />
                 <text y="6" textAnchor="middle" fontSize="17" fontWeight="900" fill="#1d1b3a">
@@ -320,7 +319,7 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
                     🪦
                   </text>
                 )}
-              </g>
+              </HunterToken>
             );
           });
         })}
@@ -346,6 +345,35 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
       </svg>
       </div>
     </div>
+  );
+}
+
+const STEP_MS = 420;
+
+/**
+ * A human's token. When it changes place it walks there instead of jumping:
+ * out through the doorway between the two places, then on to its new spot.
+ * (Changing floors swaps to the other plan, so the stairs are a jump.)
+ */
+function HunterToken({ x, y, loc, dim, children }: { x: number; y: number; loc: LocId; dim: boolean; children: ReactNode }) {
+  const ref = useRef<SVGGElement>(null);
+  const prev = useRef<{ x: number; y: number; loc: LocId } | null>(null);
+  useLayoutEffect(() => {
+    const from = prev.current;
+    prev.current = { x, y, loc };
+    const el = ref.current;
+    if (!from || !el || (from.x === x && from.y === y)) return;
+    const at = (px: number, py: number) => ({ transform: `translate(${px}px, ${py}px)` });
+    const frames = [at(from.x, from.y)];
+    const door = from.loc !== loc ? doorway(LAYOUT[from.loc], LAYOUT[loc]) : null;
+    if (door) frames.push(at((door[0] + door[2]) / 2, (door[1] + door[3]) / 2));
+    frames.push(at(x, y));
+    el.animate(frames, { duration: STEP_MS * (frames.length - 1), easing: "ease-in-out" });
+  }, [x, y, loc]);
+  return (
+    <g ref={ref} style={{ transform: `translate(${x}px, ${y}px)` }} opacity={dim ? 0.35 : 1} pointerEvents="none">
+      {children}
+    </g>
   );
 }
 

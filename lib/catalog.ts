@@ -44,7 +44,7 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   kenchi: { kind: "kenchi", name: "検知鬼くん", icon: "👹", use: "self", uses: 3, desc: "幽霊のいる部屋が分かる。同じ部屋なら潜伏場所まで分かる。3回まで。使ったことは幽霊にも伝わる。" },
   doll: { kind: "doll", name: "身代わり人形", icon: "🧸", use: "passive", desc: "完全復活した幽霊の攻撃を1度だけ防ぐ。防ぐと消える。" },
   holywater: { kind: "holywater", name: "聖水", icon: "💧", use: "room", desc: "今いる部屋に撒く。次の幽霊ターンが終わるまで幽霊はその部屋に入れない。幽霊が部屋にいれば1ダメージ。" },
-  crystal: { kind: "crystal", name: "水晶玉", icon: "🔮", use: "self", desc: "次の幽霊ターンのサイコロの目が見える。何度でも使える。" },
+  crystal: { kind: "crystal", name: "水晶玉", icon: "🔮", use: "passive", desc: "人間の誰かが持っていれば、幽霊のサイコロの目がいつも見える。" },
   sword: { kind: "sword", name: "勾玉の剣", icon: "🗡️", use: "passive", desc: "完全復活した幽霊のいる場所を探索すると1ダメージ。" },
   gambler: { kind: "gambler", name: "ギャンブラーのサイコロ", icon: "🎲", use: "self", uses: 3, desc: "使った次の自分のターン、サイコロが1個増える。3回まで。" },
   flashlight: { kind: "flashlight", name: "懐中電灯", icon: "🔦", use: "passive", desc: "持って隠しアイテムのある部屋に入ると、懐中電灯と引き換えにその場で隠しアイテムを手に入れる。" },

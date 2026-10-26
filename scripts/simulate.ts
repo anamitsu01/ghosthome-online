@@ -439,6 +439,65 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
+  // Full hands can still trade between teammates in the same place.
+  const room = newGame();
+  toHunters(room);
+  const [a, b] = room.hunters;
+  b.loc = a.loc;
+  a.items = [
+    { id: "a1", kind: "bell" },
+    { id: "a2", kind: "sword" },
+  ];
+  b.items = [
+    { id: "b1", kind: "doll" },
+    { id: "b2", kind: "mirror" },
+    ...(b.character === "painter" ? [{ id: "b3", kind: "candle" as const }] : []),
+  ];
+  if (b.character !== "painter") {
+    assert.throws(() => act(room, "host", { t: "give", item: "a1", to: b.slot }), /もう持てません/);
+  }
+  act(room, "host", { t: "give", item: "a1", to: b.slot, swap: "b1" });
+  assert.deepEqual(a.items.map((i) => i.id).sort(), ["a2", "b1"]);
+  assert.ok(b.items.some((i) => i.id === "a1") && !b.items.some((i) => i.id === "b1"));
+  act(room, "host", { t: "take", item: "b2", from: b.slot, swap: "a2" });
+  assert.deepEqual(a.items.map((i) => i.id).sort(), ["b1", "b2"]);
+}
+
+{
+  // The crystal ball, just held: the humans see the ghost's dice (but not its remaining moves).
+  const room = newGame();
+  act(room, ghostId(room), { t: "roll" });
+  assert.equal(viewFor(room, "host").turn!.dice, null);
+  room.hunters[2].items.push({ id: "cr", kind: "crystal" });
+  const seen = viewFor(room, "host").turn!;
+  assert.deepEqual(seen.dice, room.turn.dice);
+  assert.equal(seen.budget, null);
+  room.hunters[2].alive = false;
+  assert.equal(viewFor(room, "host").turn!.dice, null, "a dead hunter's crystal doesn't count");
+}
+
+{
+  // Damage from the talisman or holy water is a popup.
+  const room = newGame();
+  room.ghost.loc = "hall1";
+  room.ghost.spot = null;
+  room.ghost.hp = 3;
+  room.ghost.collected = 1;
+  room.placed.ofuda.push({ spot: "toilet-0", item: { id: "o", kind: "ofuda" } });
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 4;
+  act(room, ghostId(room), { t: "gmove", to: "toilet-0" });
+  assert.equal(room.logs.at(-1)!.event, "trap");
+  act(room, ghostId(room), { t: "end" });
+  room.hunters[0].items = [{ id: "hw", kind: "holywater" }];
+  room.turn.step = "move";
+  room.turn.budget = 2;
+  act(room, "host", { t: "move", loc: "toilet" });
+  act(room, "host", { t: "use", item: "hw" });
+  assert.ok(room.logs.some((l) => l.event === "trap" && l.text.includes("聖水")));
+}
+
+{
   // Hidden view: humans don't see where the ghost is, the ghost doesn't see human items.
   const room = newGame();
   const human = viewFor(room, "host");

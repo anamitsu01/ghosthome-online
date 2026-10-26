@@ -134,7 +134,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap";
   /** Damage dealt, for a hit. */
   amount?: number;
 }
@@ -186,8 +186,6 @@ export interface RoomState {
   ghostTurns: number;
   /** Ghost may not leave this room while ghostTurns < until (手鏡). */
   lock: { room: RoomId; until: number } | null;
-  /** 水晶玉 used: the next ghost roll is shown to the humans. */
-  crystalNext: boolean;
   /** Item ids used this round (each item once per human turn). */
   usedThisRound: string[];
   logs: LogEntry[];
@@ -266,8 +264,9 @@ export type Action =
   | { t: "psychic"; loc: LocId }
   | { t: "use"; item: string; spot?: string }
   | { t: "pickup"; item: string }
-  | { t: "give"; item: string; to: number }
-  | { t: "take"; item: string; from: number };
+  /** Hand an item to / take one from a teammate in the same place; `swap` sends one back when the hands are full. */
+  | { t: "give"; item: string; to: number; swap?: string }
+  | { t: "take"; item: string; from: number; swap?: string };
 
 /** Entering this room code opens a private test room with a wandering bot. */
 export const TEST_ROOM_CODE = "ZZZZZ";

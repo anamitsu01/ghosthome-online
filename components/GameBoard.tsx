@@ -255,9 +255,14 @@ function TurnBanner({ room, actorName, myTurn }: { room: ClientRoom; actorName: 
       <span className="text-sm text-white/60">{myTurn ? "あなたの番です" : `${actorName} が操作中…`}</span>
       {dice && dice.length > 0 && (
         <span className="ml-auto flex items-center gap-2 text-sm">
+          {budget === null && <span className="text-white/60">🔮 幽霊の出目</span>}
           <DiceRow dice={dice} />
-          <span className="text-white/60">残り移動力</span>
-          <b className="text-lg text-gold">{budget}</b>
+          {budget !== null && (
+            <>
+              <span className="text-white/60">残り移動力</span>
+              <b className="text-lg text-gold">{budget}</b>
+            </>
+          )}
         </span>
       )}
     </div>
@@ -647,22 +652,66 @@ function PlacedHere({ room, hunter, send }: { room: ClientRoom; hunter: ClientHu
 }
 
 function Transfer({ room, hunter, send }: { room: ClientRoom; hunter: ClientHunter; send: (a: Action) => Promise<string | null> }) {
+  // A hand-over into a full hand becomes a trade: pick what comes back.
+  const [trade, setTrade] = useState<{ give: boolean; item: string; mate: number } | null>(null);
   const mates = room.hunters.filter((h) => h.alive && h.slot !== hunter.slot && h.loc === hunter.loc);
   if (!mates.length || ![hunter, ...mates].some((h) => h.items?.length)) return null;
+  const chip = "rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10";
+  const full = (h: ClientHunter) => (h.items ?? []).length >= capacity(h);
+
+  if (trade) {
+    const mate = room.hunters[trade.mate];
+    const receiver = trade.give ? mate : hunter;
+    const giver = trade.give ? hunter : mate;
+    const item = (giver.items ?? []).find((i) => i.id === trade.item);
+    return (
+      <div className="rounded-lg border border-gold/40 p-2 text-xs">
+        <p className="mb-1 text-white/70">
+          {CHARACTERS[receiver.character].name}は持ち物がいっぱい。{item && `${ITEMS[item.kind].icon}${ITEMS[item.kind].name}`}と何を交換する?
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {(receiver.items ?? []).map((i) => (
+            <button
+              key={i.id}
+              className={chip}
+              onClick={() => {
+                setTrade(null);
+                send(trade.give ? { t: "give", item: trade.item, to: trade.mate, swap: i.id } : { t: "take", item: trade.item, from: trade.mate, swap: i.id });
+              }}
+            >
+              {ITEMS[i.kind].icon}{ITEMS[i.kind].name}
+            </button>
+          ))}
+          <button className={chip} onClick={() => setTrade(null)}>
+            やめる
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-white/10 p-2">
-      <p className="mb-1 text-xs text-white/40">同じ場所の仲間と受け渡し</p>
+      <p className="mb-1 text-xs text-white/40">同じ場所の仲間と受け渡し(持ち物がいっぱいなら交換)</p>
       {mates.map((m) => (
         <div key={m.slot} className="mb-1 flex flex-wrap items-center gap-1 text-xs">
           <span className="mr-1">{CHARACTERS[m.character].name}:</span>
           {(hunter.items ?? []).map((i) => (
-            <button key={i.id} onClick={() => send({ t: "give", item: i.id, to: m.slot })} className="rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10">
-              {ITEMS[i.kind].icon}を渡す
+            <button
+              key={i.id}
+              onClick={() => (full(m) ? setTrade({ give: true, item: i.id, mate: m.slot }) : send({ t: "give", item: i.id, to: m.slot }))}
+              className={chip}
+            >
+              {ITEMS[i.kind].icon}を{full(m) ? "交換に出す" : "渡す"}
             </button>
           ))}
           {(m.items ?? []).map((i) => (
-            <button key={i.id} onClick={() => send({ t: "take", item: i.id, from: m.slot })} className="rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10">
-              {ITEMS[i.kind].icon}をもらう
+            <button
+              key={i.id}
+              onClick={() => (full(hunter) ? setTrade({ give: false, item: i.id, mate: m.slot }) : send({ t: "take", item: i.id, from: m.slot }))}
+              className={chip}
+            >
+              {ITEMS[i.kind].icon}を{full(hunter) ? "交換でもらう" : "もらう"}
             </button>
           ))}
         </div>
@@ -909,6 +958,19 @@ function FoundPopup({ room }: { room: ClientRoom }) {
         place={place}
         note={isGhost ? "2つ目の品の力で、人間全員をこの部屋へ集めた。" : "幽霊が2つ目の品を手に入れた。人間は全員この部屋へ強制移動。"}
         tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "trap") {
+    const ofuda = entry.text.includes("落魂札");
+    return (
+      <InfoPopup
+        icon={<span className="gh-shake inline-block">{ofuda ? "📜" : "💧"}</span>}
+        title={ofuda ? "落魂札が発動した!" : "聖水が幽霊を焼いた!"}
+        place={place}
+        note={`幽霊に${entry.amount ?? 1}ダメージ!${isGhost ? "" : ofuda ? " 幽霊はこの場所を通った。" : " 幽霊はこの部屋にいた。"}`}
+        tone={isGhost ? "bad" : "good"}
         onClose={close}
       />
     );

@@ -114,7 +114,6 @@ function emptyGame(): Pick<
   | "escape"
   | "ghostTurns"
   | "lock"
-  | "crystalNext"
   | "usedThisRound"
   | "logs"
   | "logSeq"
@@ -138,7 +137,6 @@ function emptyGame(): Pick<
     escape: null,
     ghostTurns: 0,
     lock: null,
-    crystalNext: false,
     usedThisRound: [],
     logs: [],
     logSeq: 0,
@@ -475,7 +473,7 @@ function ghostArrive(room: RoomState, loc: LocId, spot: string | null, canKill: 
     if (ofuda) {
       room.placed.ofuda = room.placed.ofuda.filter((o) => o !== ofuda);
       log(room, "all", `📜 ${spotName(spot)}の落魂札が発動した!`, "warn", { spot });
-      if (damageGhost(room, 1, "落魂札の力で")) return true;
+      if (damageGhost(room, 1, "落魂札の力で", { spot, event: "trap" })) return true;
     }
   }
   if (canKill && g.revived) {
@@ -520,10 +518,6 @@ function ghostRoll(room: RoomState): void {
   room.turn.budget = sum(dice);
   room.turn.step = "move";
   log(room, "ghost", `サイコロ: ${dice.join(" + ")} = ${sum(dice)}`);
-  if (room.crystalNext) {
-    room.crystalNext = false;
-    log(room, "human", `🔮 水晶玉: 幽霊のサイコロは ${dice.join(" + ")} = ${sum(dice)}`, "good");
-  }
 }
 
 function ghostMove(room: RoomState, to: string): void {
@@ -927,10 +921,19 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       const [from, to] = action.t === "give" ? [h, other] : [other, h];
       const item = from.items.find((i) => i.id === action.item);
       if (!item) throw new GameError("そのアイテムを持っていません");
-      if (to.items.length >= capacity(to)) throw new GameError(`${hunterName(to)}はもう持てません`);
+      // Full hands trade: the receiver hands one of its own back.
+      const back = action.swap ? to.items.find((i) => i.id === action.swap) : undefined;
+      if (action.swap && !back) throw new GameError("交換するアイテムがありません");
+      if (!back && to.items.length >= capacity(to)) throw new GameError(`${hunterName(to)}はもう持てません(交換するアイテムを選んでください)`);
       from.items = from.items.filter((i) => i !== item);
       to.items.push(item);
-      log(room, "human", `${hunterName(from)} → ${hunterName(to)}: ${ITEMS[item.kind].name}を渡した`);
+      if (back) {
+        to.items = to.items.filter((i) => i !== back);
+        from.items.push(back);
+        log(room, "human", `${hunterName(from)}と${hunterName(to)}: ${ITEMS[item.kind].name}と${ITEMS[back.kind].name}を交換した`);
+      } else {
+        log(room, "human", `${hunterName(from)} → ${hunterName(to)}: ${ITEMS[item.kind].name}を渡した`);
+      }
       return;
     }
     case "end":
@@ -1080,7 +1083,7 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string):
       room.placed.holy.push({ room: r, until: room.ghostTurns + 1 });
       log(room, "human", `💧 ${ROOM[r].name}に聖水を撒いた`, "info", { loc: r });
       if (room.ghost.loc === r) {
-        if (damageGhost(room, 1, "聖水が幽霊を焼いた!")) return;
+        if (damageGhost(room, 1, "聖水が幽霊を焼いた!", { event: "trap" })) return;
         startEscape(room, "continue");
       } else {
         log(room, "human", "…何の反応もない", "info");
@@ -1107,10 +1110,6 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string):
       );
       return;
     }
-    case "crystal":
-      room.crystalNext = true;
-      log(room, "human", "🔮 水晶玉に念を込めた。次の幽霊のサイコロが見える", "info");
-      return;
     case "gambler":
       spend();
       h.gamblerNext = true;
@@ -1194,7 +1193,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
       : side === "human"
         ? room.humanKnow.spots
         : {};
-  const ghostDiceVisible = isGhost;
+  const crystal = room.hunters.some((h) => h.alive && has(h, "crystal"));
   return {
     code: room.code,
     isTest: room.isTest,
@@ -1221,13 +1220,13 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
     turn: playing
       ? {
           ...room.turn,
-          dice: room.turn.side === "human" || ghostDiceVisible ? room.turn.dice : null,
-          budget: room.turn.side === "human" || ghostDiceVisible ? room.turn.budget : null,
+          dice: room.turn.side === "human" || isGhost || (crystal && isHuman) ? room.turn.dice : null,
+          budget: room.turn.side === "human" || isGhost ? room.turn.budget : null,
           path: room.turn.side === "human" || isGhost ? room.turn.path : [],
         }
       : null,
     escape: room.escape
-      ? { ...room.escape, dice: isGhost ? room.escape.dice : null, budget: isGhost ? room.escape.budget : null }
+      ? { ...room.escape, dice: isGhost || (crystal && isHuman) ? room.escape.dice : null, budget: isGhost ? room.escape.budget : null }
       : null,
     actor: actorOf(room),
     placed: isHuman ? room.placed : null,
