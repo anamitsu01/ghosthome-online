@@ -82,13 +82,25 @@ export const GHOST_ITEMS: Record<GhostItemName, { name: string; icon: string }> 
 export const GHOST_ITEM_NAMES: GhostItemName[] = ["bracelet", "jewel", "knife"];
 
 /** The ghost's own tools: found in hiding spots like everything else, usable only by the ghost. */
-export type GhostToolKind = "scrap" | "tablet" | "jizo";
+export type GhostToolKind = "scrap" | "tablet" | "jizo" | "phone" | "letter";
 export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; desc: string; uses: number }> = {
   scrap: { name: "焼け焦げた切れ端", icon: "🔥", desc: "幽霊の体力を1回復する(最大まで)。使い捨て。", uses: 1 },
   tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を1人ランダムに選び、次のターン行動不能にする。3回まで(1ターン1回)。", uses: 3 },
   jizo: { name: "首無し地蔵", icon: "🗿", desc: "扉を1つ選び、次の幽霊ターンが終わるまで人間が通れないようにする。使い捨て。", uses: 1 },
+  phone: {
+    name: "あの世の電話",
+    icon: "📞",
+    desc: "人間の誰かが屋根裏部屋に入るまで、人間は部屋に入れない(屋根裏部屋へ向かう道と、廊下へ出るための隣の部屋は例外)。使い捨て。",
+    uses: 1,
+  },
+  letter: {
+    name: "赤い手紙",
+    icon: "✉️",
+    desc: "まだ探索していない潜伏場所を1つランダムに選び、何があるか(何もないか)が分かる。仕掛けられた札や手鏡は分からない。使い捨て。",
+    uses: 1,
+  },
 };
-export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo"];
+export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo", "phone", "letter"];
 /** The ghost carries at most this many tools (its revival items don't count). */
 export const GHOST_TOOL_LIMIT = 2;
 

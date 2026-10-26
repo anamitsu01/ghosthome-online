@@ -26,6 +26,7 @@ import {
   doorId,
   doorName,
   hearsFrom,
+  phoneAllows,
   isHall,
   locName,
   spotName,
@@ -110,6 +111,7 @@ function emptyGame(): Pick<
   | "ghostSearchedAll"
   | "ghostCandles"
   | "doorBlocks"
+  | "phone"
   | "turn"
   | "escape"
   | "ghostTurns"
@@ -133,6 +135,7 @@ function emptyGame(): Pick<
     ghostSearchedAll: [],
     ghostCandles: [],
     doorBlocks: [],
+    phone: false,
     turn: { round: 0, side: "ghost", hunter: 0, step: "roll", dice: [], budget: 0, searched: false, resolveSpot: null, pendingEscape: false, path: [] },
     escape: null,
     ghostTurns: 0,
@@ -664,6 +667,17 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind, door?: string): vo
     if (g.hp >= ghostMaxHp(room)) throw new GameError("体力は満タンです");
     g.hp += 1;
     log(room, "ghost", `🔥 焼け焦げた切れ端を使った。体力が1回復した(体力${g.hp})`, "good");
+  } else if (kind === "phone") {
+    if (room.phone) throw new GameError("あの世の電話はもう鳴っています");
+    room.phone = true;
+    log(room, "all", "📞 あの世の電話が鳴り響く…人間の誰かが屋根裏部屋に入るまで、人間は部屋に入れない", "bad", { loc: "attic", event: "phone" });
+  } else if (kind === "letter") {
+    const unknown = SPOTS.filter((s) => !room.ghostKnow[s.id]);
+    if (!unknown.length) throw new GameError("まだ探索していない潜伏場所がありません");
+    const s = pick(unknown);
+    const content = room.spots[s.id];
+    room.ghostKnow[s.id] = known(content);
+    log(room, "ghost", `✉️ 赤い手紙: ${spotName(s.id)}には${describe(content)}`, "info", { spot: s.id, event: "letter", found: known(content) });
   } else if (kind === "jizo") {
     if (!door || !DOOR_IDS.includes(door)) throw new GameError("塞ぐ扉を選んでください");
     // Shut through the humans' next round, until this ghost's next turn ends.
@@ -836,6 +850,10 @@ function arriveHunter(room: RoomState, h: Hunter, loc: LocId): void {
     room.turn.path.push(loc);
   }
   if (isHall(loc)) return;
+  if (loc === "attic" && room.phone) {
+    room.phone = false;
+    log(room, "all", `📞 ${hunterName(h)}が屋根裏部屋で電話に出た。あの世の電話が止んだ`, "good", { loc, event: "phoneEnd" });
+  }
   // The flashlight finds the hidden item and is used up: the item takes its place in hand.
   const flashlight = h.items.find((i) => i.kind === "flashlight");
   if (room.hidden && room.hidden.room === loc && flashlight) {
@@ -887,6 +905,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       if (h.psychicUsed) throw new GameError("ワープはもう使いました");
       if (t.step !== "roll") throw new GameError("ワープはサイコロを振る前だけです");
       if (!(action.loc in HUMAN_ADJ) || action.loc === h.loc) throw new GameError("その場所には行けません");
+      if (room.phone && !isHall(action.loc) && action.loc !== "attic") throw new GameError("あの世の電話が鳴っていて、部屋には入れません");
       h.psychicUsed = true;
       log(room, "all", `🌀 超能力者が${locName(action.loc)}へワープした`, "info", { loc: action.loc });
       arriveHunter(room, h, action.loc);
@@ -896,6 +915,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       if (t.step !== "move") throw new GameError("先にサイコロを振ってください");
       if (!HUMAN_ADJ[h.loc].includes(action.loc)) throw new GameError("出入口でつながった隣の部屋・廊下にしか行けません");
       if (doorBlocked(room, h.loc, action.loc)) throw new GameError("首無し地蔵に扉を塞がれていて通れません");
+      if (room.phone && !phoneAllows(h.loc, action.loc)) throw new GameError("あの世の電話が鳴っていて、屋根裏部屋に誰かが入るまで部屋には入れません");
       if (MOVE_COST > t.budget) throw new GameError(`移動力が足りません(必要 ${MOVE_COST})`);
       t.budget -= MOVE_COST;
       arriveHunter(room, h, action.loc);
@@ -1242,6 +1262,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
     humanKnow: isHuman ? room.humanKnow : null,
     ghostCandles: isGhost ? room.ghostCandles : [],
     doorBlocks: room.doorBlocks.filter((d) => room.ghostTurns < d.until),
+    phone: room.phone,
     hidden: ended ? room.hidden : null,
     lock: isGhost ? room.lock : null,
     ghostTurns: room.ghostTurns,
@@ -1279,6 +1300,8 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     if (ready("tablet") && aliveHunters(room).some((h) => !h.stunned) && Math.random() < 0.3) return step({ t: "gtool", kind: "tablet" });
     if (ready("scrap") && g.hp < ghostMaxHp(room)) return step({ t: "gtool", kind: "scrap" });
     if (ready("jizo") && Math.random() < 0.3) return step({ t: "gtool", kind: "jizo", door: pick(DOOR_IDS) });
+    if (ready("phone") && !room.phone && Math.random() < 0.3) return step({ t: "gtool", kind: "phone" });
+    if (ready("letter") && SPOTS.some((s) => !room.ghostKnow[s.id]) && Math.random() < 0.5) return step({ t: "gtool", kind: "letter" });
     if (t.step === "resolve") {
       const c = room.spots[t.resolveSpot!];
       if (c?.type === "tool") return step({ t: "resolve", take: true, leave: g.tools.length >= GHOST_TOOL_LIMIT ? g.tools[0].kind : null });
@@ -1310,7 +1333,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
   if (!isHall(h.loc) && here.length && (t.budget < MOVE_COST || Math.random() < 0.4)) {
     return step({ t: "search", spot: pick(here).id });
   }
-  const open = HUMAN_ADJ[h.loc].filter((l) => !doorBlocked(room, h.loc, l));
+  const open = HUMAN_ADJ[h.loc].filter((l) => !doorBlocked(room, h.loc, l) && (!room.phone || phoneAllows(h.loc, l)));
   if (t.budget >= MOVE_COST && open.length) return step({ t: "move", loc: pick(open) });
   return step({ t: "end" });
 }

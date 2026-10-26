@@ -134,7 +134,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter";
   /** Damage dealt, for a hit. */
   amount?: number;
 }
@@ -180,6 +180,8 @@ export interface RoomState {
   ghostCandles: RoomId[];
   /** Doorways shut by the 首無し地蔵 (public). */
   doorBlocks: DoorBlock[];
+  /** あの世の電話 is ringing: humans can't enter rooms until one of them reaches the attic (public). */
+  phone: boolean;
   turn: TurnState;
   escape: EscapeState | null;
   /** Normal ghost turns completed. */
@@ -239,6 +241,7 @@ export interface ClientRoom {
   /** The ghost's view: candle rooms it knows of. */
   ghostCandles: RoomId[];
   doorBlocks: DoorBlock[];
+  phone: boolean;
   hidden: RoomState["hidden"];
   lock: RoomState["lock"];
   ghostTurns: number;

@@ -177,6 +177,18 @@ export function doorsOnFloor(floor: Floor): Edge[] {
   return DOORS.filter(([a, b]) => !(isHall(a) && isHall(b)) && floorOf(a) === floor);
 }
 
+/**
+ * あの世の電話: until a human reaches the attic, humans may not step into rooms. Allowed anyway:
+ * the way to the attic (2F hallway → children's room → attic), and stepping out of a room that has
+ * no door to the hallway into the neighbouring room on the way out (study → bedroom A, bath → toilet,
+ * kitchen → living / guest room).
+ */
+export function phoneAllows(from: LocId, to: LocId): boolean {
+  if (isHall(to) || to === "attic") return true;
+  if (from === "hall2" && to === "kids") return true;
+  return !isHall(from) && !HUMAN_ADJ[from].some(isHall);
+}
+
 /** A doorway's id, the same whichever side it is named from. */
 export function doorId(a: LocId, b: LocId): string {
   return [a, b].sort().join("|");

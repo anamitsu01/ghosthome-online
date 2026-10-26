@@ -1,7 +1,7 @@
 // Checks a few rules on hand-set situations, then plays random bot games and prints statistics.
 import assert from "node:assert/strict";
 import { act, addBot, botAct, createRoom, pendingBot, startGame, updateSettings, viewFor } from "../lib/gameEngine";
-import { GHOST_ADJ, HUMAN_ADJ, SPOT, SPOTS } from "../lib/map";
+import { GHOST_ADJ, HUMAN_ADJ, SPOT, SPOTS, phoneAllows } from "../lib/map";
 import type { Item, RoomState } from "../lib/types";
 
 // ---------- map ----------
@@ -27,7 +27,7 @@ for (let i = 0; i < 200; i++) {
   assert.equal(ghostSpots.length, 3);
   assert.ok(ghostSpots.filter((s) => s.cost === 3).length >= 2);
   assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "human").length, 13);
-  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 3);
+  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 5);
   const flash = SPOTS.find((s) => {
     const c = room.spots[s.id];
     return c?.type === "human" && c.item.kind === "flashlight";
@@ -516,6 +516,43 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   assert.ok(!room.hunters[0].items.some((i) => i.kind === "ofuda"));
   assert.deepEqual(room.placed.ofuda.map((o) => o.spot), ["toilet-1"]);
   assert.equal(room.spots["toilet-1"], null, "the spot itself is empty; the talisman is set on it");
+}
+
+{
+  // あの世の電話: no stepping into rooms until someone reaches the attic; dead ends may step out, the way to the attic is open.
+  const room = newGame();
+  room.ghost.loc = "storage";
+  room.ghost.spot = "storage-0";
+  room.ghost.tools = [{ kind: "phone", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "phone" });
+  assert.equal(room.phone, true);
+  assert.equal(room.logs.at(-1)!.event, "phone");
+  toHunters(room, 6);
+  assert.throws(() => act(room, "host", { t: "move", loc: "toilet" }), /電話/);
+  act(room, "host", { t: "move", loc: "hall2" });
+  act(room, "host", { t: "move", loc: "kids" });
+  act(room, "host", { t: "move", loc: "attic" });
+  assert.equal(room.phone, false, "answered in the attic");
+  assert.equal(room.logs.at(-1)!.event, "phoneEnd");
+  // dead-end rooms let you step out toward the hallway
+  assert.ok(phoneAllows("bath", "toilet") && phoneAllows("study", "bedA") && phoneAllows("kitchen", "living"));
+  assert.ok(!phoneAllows("hall1", "living") && !phoneAllows("toilet", "bath"));
+}
+
+{
+  // 赤い手紙: reveals one spot the ghost hasn't searched, onto the ghost's map only.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "letter", uses: 1 }];
+  for (const s of SPOTS) if (s.id !== "attic-2") room.ghostKnow[s.id] = { type: "empty" };
+  room.spots["attic-2"] = { type: "human", item: { id: "x", kind: "sword" } };
+  room.placed.ofuda.push({ spot: "attic-2", item: { id: "o2", kind: "ofuda" } });
+  act(room, ghostId(room), { t: "gtool", kind: "letter" });
+  assert.deepEqual(room.ghostKnow["attic-2"], { type: "human", kind: "sword" });
+  const letter = room.logs.at(-1)!;
+  assert.equal(letter.event, "letter");
+  assert.equal(letter.to, "ghost");
+  assert.ok(!letter.text.includes("落魂札"), "a set talisman isn't revealed");
+  assert.equal(viewFor(room, ghostId(room)).placed, null);
 }
 
 {

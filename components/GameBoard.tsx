@@ -2,7 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTERS, GHOST_COLORS, GHOST_ITEMS, GHOST_TOOL_LIMIT, GHOST_TOOLS, ITEMS, type GhostToolKind } from "@/lib/catalog";
-import { FORCED_ROOMS, GHOST_ADJ, HUMAN_ADJ, MOVE_COST, ROOM, SPOT, SPOTS, doorId, isHall, locName, spotName, type LocId, type RoomId } from "@/lib/map";
+import {
+  FORCED_ROOMS,
+  GHOST_ADJ,
+  HUMAN_ADJ,
+  MOVE_COST,
+  ROOM,
+  SPOT,
+  SPOTS,
+  doorId,
+  isHall,
+  locName,
+  phoneAllows,
+  spotName,
+  type LocId,
+  type RoomId,
+} from "@/lib/map";
 import type { ClientToServerEvents } from "@/lib/socketEvents";
 import type { Action, ClientHunter, ClientRoom, Item, LogEntry } from "@/lib/types";
 import HouseMap, { ghostColor } from "./HouseMap";
@@ -111,12 +126,17 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
     }
     if (active) {
       if (psychicMode) {
-        (Object.keys(HUMAN_ADJ) as LocId[]).filter((l) => l !== active.loc).forEach((l) => t.add(l));
+        (Object.keys(HUMAN_ADJ) as LocId[])
+          .filter((l) => l !== active.loc && (!room.phone || isHall(l) || l === "attic"))
+          .forEach((l) => t.add(l));
         return [t, lit];
       }
       if (turn.step === "resolve") return [t, lit];
       const shut = new Set(room.doorBlocks.map((d) => d.door));
-      if (turn.step === "move" && budget >= MOVE_COST) HUMAN_ADJ[active.loc].filter((l) => !shut.has(doorId(active.loc, l))).forEach((l) => t.add(l));
+      if (turn.step === "move" && budget >= MOVE_COST)
+        HUMAN_ADJ[active.loc]
+          .filter((l) => !shut.has(doorId(active.loc, l)) && (!room.phone || phoneAllows(active.loc, l)))
+          .forEach((l) => t.add(l));
       if (!isHall(active.loc)) SPOTS.filter((s) => s.room === active.loc).forEach((s) => t.add(s.id));
     }
     return [t, lit];
@@ -253,6 +273,11 @@ function TurnBanner({ room, actorName, myTurn }: { room: ClientRoom; actorName: 
       <span className="text-xs text-white/40">ラウンド {turn.round}</span>
       <span className="font-bold">{title}</span>
       <span className="text-sm text-white/60">{myTurn ? "あなたの番です" : `${actorName} が操作中…`}</span>
+      {room.phone && (
+        <span className="gh-flicker rounded-full border border-red-500/60 bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-300">
+          📞 あの世の電話: 屋根裏部屋に誰かが入るまで人間は部屋に入れない
+        </span>
+      )}
       {dice && dice.length > 0 && (
         <span className="ml-auto flex items-center gap-2 text-sm">
           {budget === null && <span className="text-white/60">🔮 幽霊の出目</span>}
@@ -987,6 +1012,55 @@ function FoundPopup({ room }: { room: ClientRoom }) {
         place={place}
         note={isGhost ? "2つ目の品の力で、人間全員をこの部屋へ集めた。" : "幽霊が2つ目の品を手に入れた。人間は全員この部屋へ強制移動。"}
         tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "phone") {
+    return (
+      <InfoPopup
+        icon={<span className="gh-ring inline-block">📞</span>}
+        title="あの世の電話が鳴り響く…"
+        place="屋根裏部屋"
+        note={
+          isGhost
+            ? "人間の誰かが屋根裏部屋に入るまで、人間は部屋に入れない。"
+            : "誰かが屋根裏部屋に入って電話に出るまで、人間は部屋に入れない(屋根裏部屋へ向かう道と、廊下へ出るための隣の部屋は通れる)。"
+        }
+        tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "phoneEnd") {
+    return (
+      <InfoPopup
+        icon="📞"
+        title="電話が止んだ"
+        place="屋根裏部屋"
+        note={isGhost ? "人間が屋根裏部屋で電話に出た。もう部屋に入られてしまう。" : "屋根裏部屋で電話に出た。また部屋に入れるようになった。"}
+        tone={isGhost ? "bad" : "good"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "letter" && entry.found) {
+    const f = entry.found;
+    const what =
+      f.type === "empty"
+        ? "何もない"
+        : f.type === "human"
+          ? `${ITEMS[f.kind].icon} ${ITEMS[f.kind].name}`
+          : f.type === "tool"
+            ? `${GHOST_TOOLS[f.kind].icon} ${GHOST_TOOLS[f.kind].name}`
+            : `${GHOST_ITEMS[f.name].icon} ${GHOST_ITEMS[f.name].name}`;
+    return (
+      <InfoPopup
+        icon="✉️"
+        title="赤い手紙が告げる…"
+        place={place}
+        note={`ここには「${what}」。`}
+        tone={f.type === "ghost" || f.type === "tool" ? "good" : "dull"}
         onClose={close}
       />
     );
