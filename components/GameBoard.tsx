@@ -113,6 +113,13 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
         return [t, lit];
       }
       if (ghostStep !== "move" && ghostStep !== "hide") return [t, lit];
+      // Fully revived: no hiding spots, it moves room by room.
+      if (ghost.revived) {
+        if (budget >= MOVE_COST && !(room.lock && room.lock.room === ghost.loc && room.ghostTurns < room.lock.until)) {
+          GHOST_ADJ[ghost.loc].forEach((n) => t.add(n));
+        }
+        return [t, lit];
+      }
       const here = SPOTS.filter((s) => s.room === ghost.loc);
       here.forEach((s) => t.add(s.id));
       if (ghostStep === "hide" || budget < MOVE_COST) return [t, lit];
@@ -448,11 +455,17 @@ function QuickActions({
             </>
           ) : (
             <p className="text-white/60">
-              {step === "hide" ? "部屋の中で隠れる場所を選んで終了" : escape ? "光る部屋の潜伏場所へ逃げる" : "光る部屋の潜伏場所へ移動。今の部屋の場所を選ぶと探索"}
+              {g.revived
+                ? "光る部屋・廊下へ移動。人間のいる場所に入れば襲える"
+                : step === "hide"
+                  ? "部屋の中で隠れる場所を選んで終了"
+                  : escape
+                    ? "光る部屋の潜伏場所へ逃げる"
+                    : "光る部屋の潜伏場所へ移動。今の部屋の場所を選ぶと探索"}
             </p>
           )}
           <QBtn primary onClick={() => send({ t: "end" })}>
-            {g.spot ? "潜伏して終了" : "廊下に潜んで終了"}
+            {g.revived ? "ターンを終える" : g.spot ? "潜伏して終了" : "廊下に潜んで終了"}
           </QBtn>
         </>
       );
@@ -487,7 +500,9 @@ function QuickActions({
               </QBtn>
             </>
           ) : (
-            <p className="text-white/60">光る部屋へ移動。潜伏場所を選ぶと探索</p>
+            <p className="text-white/60">
+              {room.ghost?.revived ? "光る部屋へ移動。武器を持って幽霊の場所に入れば攻撃" : "光る部屋へ移動。潜伏場所を選ぶと探索"}
+            </p>
           )}
           {mediumButton}
           <QBtn onClick={() => send({ t: "end" })}>ターンを終える</QBtn>

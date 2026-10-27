@@ -242,8 +242,9 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
           );
         })}
 
-        {/* hiding spots */}
-        {locs
+        {/* hiding spots (gone once the ghost has fully revived) */}
+        {!horror &&
+          locs
           .filter((l): l is RoomId => !isHall(l))
           .map((r) =>
             ROOM[r].spots.map((s, i) => {

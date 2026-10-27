@@ -377,7 +377,7 @@ function over(room: RoomState): boolean {
 }
 
 /** Damage to the ghost. Returns true if that finished it. */
-function damageGhost(room: RoomState, amount: number, cause: string, extra: { spot?: string; event?: LogEntry["event"] } = {}): boolean {
+function damageGhost(room: RoomState, amount: number, cause: string, extra: { spot?: string; loc?: LocId; event?: LogEntry["event"] } = {}): boolean {
   room.ghost.hp -= amount;
   log(room, "all", `${cause} 幽霊に${amount}ダメージ!`, "good", {
     ...(room.ghost.revived ? { spot: room.ghost.spot ?? undefined } : {}),
@@ -438,7 +438,11 @@ interface GhostStep {
 export function ghostStepCost(room: RoomState, to: string, afterSearch: boolean): GhostStep | string {
   const g = room.ghost;
   let target: { loc: LocId; spot: string | null };
-  if (SPOT[to]) target = { loc: SPOT[to].room, spot: to };
+  // Fully revived, the ghost moves room by room like the humans (the hiding spots are gone).
+  if (g.revived) {
+    if (!(to in GHOST_ADJ)) return "その場所には行けません";
+    target = { loc: to as LocId, spot: null };
+  } else if (SPOT[to]) target = { loc: SPOT[to].room, spot: to };
   else if (to === "hall1" || to === "hall2") target = { loc: to, spot: null };
   else return "その場所には行けません";
   if (target.loc === g.loc) {
@@ -450,7 +454,7 @@ export function ghostStepCost(room: RoomState, to: string, afterSearch: boolean)
   if (locked && g.loc === locked) return "手鏡の力で、この部屋から出られません";
   if (!GHOST_ADJ[g.loc].includes(target.loc)) return "隣の部屋・廊下にしか移動できません";
   if (!isHall(target.loc) && holyBlocked(room, target.loc)) return "聖水が撒かれていて入れません";
-  if (!isHall(target.loc) && !target.spot) return "部屋に入るときは潜伏場所を選びます";
+  if (!isHall(target.loc) && !target.spot && !g.revived) return "部屋に入るときは潜伏場所を選びます";
   let cost = MOVE_COST;
   if (!isHall(target.loc) && aliveHunters(room).some((h) => h.character === "scientist" && h.loc === target.loc)) {
     cost += 2;
@@ -483,6 +487,8 @@ function ghostArrive(room: RoomState, loc: LocId, spot: string | null, canKill: 
       if (doll) {
         h.items = h.items.filter((i) => i !== doll);
         log(room, "all", `🧸 ${hunterName(h)}の身代わり人形が砕けた!`, "warn", { loc });
+        // Saved by the doll with the spear in hand: it strikes back right there.
+        if (has(h, "spear") && damageGhost(room, 2, `${hunterName(h)}が身代わり人形で甦り、獣の槍で反撃!`, { loc, event: "hit" })) return true;
         continue;
       }
       h.alive = false;
@@ -538,6 +544,7 @@ function ghostSearch(room: RoomState, spotId: string): void {
   const g = room.ghost;
   const spot = SPOT[spotId];
   if (room.turn.searched) throw new GameError("探索は1ターンに1回です");
+  if (g.revived) throw new GameError("完全復活した幽霊はもう探索しません");
   if (!spot || spot.room !== g.loc) throw new GameError("今いる部屋の潜伏場所しか探索できません");
   const cost = ghostSearchCost(room, spotId);
   if (cost > room.turn.budget) throw new GameError(`移動力が足りません(探索コスト ${cost})`);
@@ -608,6 +615,13 @@ function ghostSearch(room: RoomState, spotId: string): void {
     g.revived = true;
     g.hp += 1;
     log(room, "all", `🟥 幽霊が完全復活した! 居場所は ${spotName(g.spot!)}`, "bad", { spot: g.spot!, event: "revive" });
+    // The hiding spots are gone, and whatever was left in them with them.
+    g.spot = null;
+    for (const s of SPOTS) room.spots[s.id] = null;
+    room.placed.mirrors = [];
+    room.humanKnow.spots = {};
+    room.ghostKnow = {};
+    log(room, "all", "屋敷の潜伏場所が消えた。残っていたアイテムはすべて失われた", "bad", { loc: g.loc });
     // It moves again at once, on 2 dice (3 from its next turn).
     room.turn.step = "roll";
     room.turn.dash = true;
@@ -950,6 +964,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       h.psychicUsed = true;
       log(room, "all", `🌀 超能力者が${locName(action.loc)}へワープした`, "info", { loc: action.loc });
       arriveHunter(room, h, action.loc);
+      strikeOnEntry(room, h);
       return;
     }
     case "move": {
@@ -965,6 +980,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       if (MOVE_COST > t.budget) throw new GameError(`移動力が足りません(必要 ${MOVE_COST})`);
       t.budget -= MOVE_COST;
       arriveHunter(room, h, action.loc);
+      strikeOnEntry(room, h);
       return;
     }
     case "search":
@@ -1011,6 +1027,19 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
   }
 }
 
+/**
+ * A hunter stepping into the revived ghost's room or hallway with a weapon hurts it:
+ * 獣の槍 2, 勾玉の剣 1, both together still 2. The ghost then escapes.
+ */
+function strikeOnEntry(room: RoomState, h: Hunter): void {
+  const g = room.ghost;
+  if (!g.revived || h.loc !== g.loc) return;
+  const dmg = has(h, "spear") ? 2 : has(h, "sword") ? 1 : 0;
+  if (!dmg) return;
+  if (damageGhost(room, dmg, `${hunterName(h)}が${locName(g.loc)}に踏み込み、${has(h, "spear") ? "獣の槍" : "勾玉の剣"}で`, { loc: g.loc, event: "hit" })) return;
+  startEscape(room, "continue");
+}
+
 function searchCost(room: RoomState, spotId: string): number {
   if (room.ghost.revived && room.ghost.spot === spotId) return 0;
   return Math.max(0, SPOT[spotId].cost - 1);
@@ -1019,6 +1048,7 @@ function searchCost(room: RoomState, spotId: string): number {
 function hunterSearch(room: RoomState, h: Hunter, spotId: string): void {
   const t = room.turn;
   const spot = SPOT[spotId];
+  if (room.ghost.revived) throw new GameError("潜伏場所はもうありません");
   if (!spot || spot.room !== h.loc) throw new GameError("今いる部屋の潜伏場所しか探索できません");
   const cost = searchCost(room, spotId);
   if (cost > t.budget) throw new GameError(`移動力が足りません(探索コスト ${cost})`);
@@ -1377,7 +1407,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     if (t.step === "warp") return step({ t: "warp", spot: pick(SPOTS.filter((s) => !holyBlocked(room, s.room))).id });
     if (t.step === "move") {
       const here = SPOTS.filter((s) => s.room === room.ghost.loc);
-      const affordable = t.searched ? [] : here.filter((s) => ghostSearchCost(room, s.id) <= t.budget);
+      const affordable = t.searched || g.revived ? [] : here.filter((s) => ghostSearchCost(room, s.id) <= t.budget);
       if (affordable.length && Math.random() < 0.55) return step({ t: "search", spot: pick(affordable).id });
       return ghostWander(room, t.budget, true) ?? step({ t: "end" });
     }
@@ -1394,7 +1424,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     return step({ t: "resolve", take: false, leave: null });
   }
   if (t.step === "roll") return step({ t: "roll" });
-  const here = SPOTS.filter((s) => s.room === h.loc && searchCost(room, s.id) <= t.budget);
+  const here = room.ghost.revived ? [] : SPOTS.filter((s) => s.room === h.loc && searchCost(room, s.id) <= t.budget);
   if (!isHall(h.loc) && here.length && (t.budget < MOVE_COST || Math.random() < 0.4)) {
     return step({ t: "search", spot: pick(here).id });
   }
@@ -1408,7 +1438,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
 /** A random affordable ghost step, or null to stop. */
 function ghostWander(room: RoomState, budget: number, normalTurn: boolean): RoomState | null {
   if (Math.random() < 0.15) return null;
-  const options = [...SPOTS.map((s) => s.id), "hall1", "hall2"]
+  const options = (room.ghost.revived ? [...ROOM_IDS, "hall1", "hall2"] : [...SPOTS.map((s) => s.id), "hall1", "hall2"])
     .map((to) => ({ to, step: ghostStepCost(room, to, normalTurn && stuckInRoom(room)) }))
     .filter((o): o is { to: string; step: GhostStep } => typeof o.step !== "string" && o.step.cost > 0 && o.step.cost <= budget);
   if (!options.length) return null;

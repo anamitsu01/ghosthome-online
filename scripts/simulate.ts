@@ -146,8 +146,11 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   act(room, ghostId(room), { t: "roll" });
   assert.equal(room.turn.dice.length, 2);
   assert.throws(() => act(room, ghostId(room), { t: "search", spot: "attic-1" }));
+  // The hiding spots are gone with whatever was left in them; it moves room by room now.
+  assert.equal(room.ghost.spot, null);
+  assert.ok(SPOTS.every((s) => room.spots[s.id] === null));
   room.turn.budget = 2;
-  act(room, ghostId(room), { t: "gmove", to: "kids-1" });
+  act(room, ghostId(room), { t: "gmove", to: "kids" });
   assert.equal(room.ghost.loc, "kids");
   // Revived: a human with the doll survives, the others in the room die.
   act(room, ghostId(room), { t: "end" });
@@ -158,7 +161,8 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   for (let i = 0; i < 3; i++) act(room, room.hunters[i].controller, { t: "end" });
   act(room, ghostId(room), { t: "roll" });
   room.turn.budget = 6;
-  act(room, ghostId(room), { t: "gmove", to: "kids-0" });
+  act(room, ghostId(room), { t: "gmove", to: "hall2" });
+  act(room, ghostId(room), { t: "gmove", to: "kids" });
   assert.equal(room.hunters[0].alive, false);
   assert.equal(room.hunters[1].alive, true);
   assert.equal(room.hunters[1].items.length, 0);
@@ -193,24 +197,46 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // Revived ghost: searching its spot costs 0 but only hurts with a weapon.
+  // Revived ghost: walking into its room or hallway with a weapon hurts it (spear 2, sword 1, both 2); no searching any more.
   const room = newGame();
   room.ghost.revived = true;
   room.ghost.hp = 3;
   room.ghost.loc = "toilet";
-  room.ghost.spot = "toilet-1";
-  room.spots["toilet-1"] = null;
+  room.ghost.spot = null;
   room.hunters[0].items = [];
-  toHunters(room, 2);
+  toHunters(room, 4);
   act(room, "host", { t: "move", loc: "toilet" });
-  act(room, "host", { t: "search", spot: "toilet-1" });
-  assert.equal(room.ghost.hp, 3);
-  room.hunters[1].loc = "toilet";
-  give(room, 1, "sword");
-  room.turn.step = "move";
-  room.turn.budget = 0;
-  act(room, room.hunters[1].controller, { t: "search", spot: "toilet-1" });
-  assert.equal(room.ghost.hp, 2);
+  assert.equal(room.ghost.hp, 3, "no weapon, no damage");
+  assert.throws(() => act(room, "host", { t: "search", spot: "toilet-1" }), /潜伏場所はもうありません/);
+  act(room, "host", { t: "move", loc: "hall1" });
+  room.hunters[0].items = [
+    { id: "sw", kind: "sword" },
+    { id: "sp", kind: "spear" },
+  ];
+  room.turn.budget = 2;
+  act(room, "host", { t: "move", loc: "toilet" });
+  assert.equal(room.ghost.hp, 1, "both weapons: still 2");
+  assert.ok(room.escape, "the ghost escapes");
+}
+
+{
+  // Saved by the doll while holding the spear: 2 damage back on the spot.
+  const room = newGame();
+  room.ghost.revived = true;
+  room.ghost.hp = 3;
+  room.ghost.loc = "hall1";
+  room.ghost.spot = null;
+  room.hunters.forEach((h) => (h.loc = "hall2"));
+  room.hunters[0].loc = "toilet";
+  room.hunters[0].items = [
+    { id: "dl", kind: "doll" },
+    { id: "sp", kind: "spear" },
+  ];
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 4; // the 科学者 makes entering cost 4
+  act(room, ghostId(room), { t: "gmove", to: "toilet" });
+  assert.equal(room.hunters[0].alive, true);
+  assert.equal(room.ghost.hp, 1);
 }
 
 {
@@ -362,21 +388,22 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // The ghost carries 2 tools at most: a 3rd means swapping one out into the spot.
+  // The ghost carries 3 tools at most: a 4th means swapping one out into the spot.
   const room = newGame();
   room.ghost.loc = "kitchen";
   room.ghost.spot = "kitchen-0";
   room.ghost.tools = [
     { kind: "scrap", uses: 1 },
     { kind: "tablet", uses: 2 },
+    { kind: "phone", uses: 1 },
   ];
   room.spots["kitchen-1"] = { type: "tool", kind: "jizo", uses: 1 };
   act(room, ghostId(room), { t: "roll" });
   room.turn.budget = 6;
   act(room, ghostId(room), { t: "search", spot: "kitchen-1" });
-  assert.throws(() => act(room, ghostId(room), { t: "resolve", take: true, leave: null }), /2つまで/);
+  assert.throws(() => act(room, ghostId(room), { t: "resolve", take: true, leave: null }), /3つまで/);
   act(room, ghostId(room), { t: "resolve", take: true, leave: "tablet" });
-  assert.deepEqual(room.ghost.tools.map((t) => t.kind).sort(), ["jizo", "scrap"]);
+  assert.deepEqual(room.ghost.tools.map((t) => t.kind).sort(), ["jizo", "phone", "scrap"]);
   assert.deepEqual(room.spots["kitchen-1"], { type: "tool", kind: "tablet", uses: 2 }, "uses left travel with the tool");
 }
 
