@@ -709,11 +709,11 @@ function ItemList({ hunter, room, send }: { hunter: ClientHunter; room: ClientRo
               </span>
               {usable && (
                 <button
-                  disabled={used || (d.use === "room" && isHall(hunter.loc))}
+                  disabled={used || (d.use === "room" && isHall(hunter.loc) && !(i.kind === "holywater" && room.ghost?.revived))}
                   onClick={() => (d.use === "trade" ? setTicket(i.id) : send({ t: "use", item: i.id }))}
                   className="ml-auto rounded-full bg-violet/70 px-3 py-0.5 text-xs font-bold disabled:opacity-30"
                 >
-                  {d.use === "room" ? "この部屋に使う" : "使う"}
+                  {d.use === "room" ? (isHall(hunter.loc) ? "この廊下に使う" : "この部屋に使う") : "使う"}
                 </button>
               )}
               {d.use === "spot" && <span className="ml-auto text-xs text-white/40">潜伏場所を選んで置く</span>}

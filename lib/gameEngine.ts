@@ -357,7 +357,7 @@ function has(h: Hunter, kind: ItemKind): boolean {
   return h.items.some((i) => i.kind === kind);
 }
 
-function holyBlocked(room: RoomState, r: RoomId): boolean {
+function holyBlocked(room: RoomState, r: LocId): boolean {
   return room.placed.holy.some((h) => h.room === r && room.ghostTurns < h.until);
 }
 
@@ -453,7 +453,7 @@ export function ghostStepCost(room: RoomState, to: string, afterSearch: boolean)
   const locked = lockedRoom(room);
   if (locked && g.loc === locked) return "手鏡の力で、この部屋から出られません";
   if (!GHOST_ADJ[g.loc].includes(target.loc)) return "隣の部屋・廊下にしか移動できません";
-  if (!isHall(target.loc) && holyBlocked(room, target.loc)) return "聖水が撒かれていて入れません";
+  if (holyBlocked(room, target.loc)) return "聖水が撒かれていて入れません";
   if (!isHall(target.loc) && !target.spot && !g.revived) return "部屋に入るときは潜伏場所を選びます";
   let cost = MOVE_COST;
   if (!isHall(target.loc) && aliveHunters(room).some((h) => h.character === "scientist" && h.loc === target.loc)) {
@@ -1147,8 +1147,11 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string, 
   };
 
   switch (item.kind) {
-    case "bell":
     case "holywater":
+      // Against the fully revived ghost, holy water can be thrown in a hallway too.
+      if (!inRoom && !room.ghost.revived) throw new GameError("廊下には置けません");
+      break;
+    case "bell":
     case "candle":
       if (!inRoom) throw new GameError("廊下には置けません");
       break;
@@ -1177,9 +1180,9 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string, 
       return;
     case "holywater": {
       drop();
-      room.placed.holy.push({ room: r, until: room.ghostTurns + 1 });
-      log(room, "human", `💧 ${ROOM[r].name}に聖水を撒いた`, "info", { loc: r });
-      if (room.ghost.loc === r) {
+      room.placed.holy.push({ room: h.loc, until: room.ghostTurns + 1 });
+      log(room, "human", `💧 ${locName(h.loc)}に聖水を撒いた`, "info", { loc: h.loc });
+      if (room.ghost.loc === h.loc) {
         if (damageGhost(room, 1, "聖水が幽霊を焼いた!", { event: "trap" })) return;
         startEscape(room, "continue");
       } else {

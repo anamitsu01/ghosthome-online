@@ -206,6 +206,11 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
                   <text x={r.x + r.w - 56} y={r.y + 26} textAnchor="middle" fontSize="13" fill={C.dim}>
                     階段 ⇅
                   </text>
+                  {placed?.holy.some((h) => h.room === loc && room.ghostTurns < h.until) && (
+                    <text x={r.x + 110} y={r.y + 23} fontSize="17" pointerEvents="none">
+                      💧
+                    </text>
+                  )}
                 </g>
               )}
               {!isHall(loc) && (

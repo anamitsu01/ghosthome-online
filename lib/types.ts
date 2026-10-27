@@ -77,7 +77,8 @@ export interface Placed {
   bells: { room: RoomId; item: Item }[];
   mirrors: { spot: string; item: Item }[];
   /** Blocks the room while ghostTurns < until. */
-  holy: { room: RoomId; until: number }[];
+  /** Rooms (and, once the ghost has fully revived, hallways) sprinkled with holy water. */
+  holy: { room: LocId; until: number }[];
   candles: RoomId[];
 }
 

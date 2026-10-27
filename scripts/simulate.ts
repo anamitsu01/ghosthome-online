@@ -220,6 +220,33 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
+  // Holy water still hurts the revived ghost, and can be thrown in a hallway then; it then keeps the ghost out.
+  const room = newGame();
+  room.ghost.revived = true;
+  room.ghost.hp = 3;
+  room.ghost.loc = "hall1";
+  room.ghost.spot = null;
+  room.hunters[0].items = [{ id: "hw2", kind: "holywater" }];
+  toHunters(room);
+  room.hunters[0].loc = "hall1";
+  act(room, "host", { t: "use", item: "hw2" });
+  assert.equal(room.ghost.hp, 2);
+  assert.ok(room.escape);
+  act(room, ghostId(room), { t: "roll" });
+  room.escape!.budget = 4;
+  act(room, ghostId(room), { t: "gmove", to: "toilet" });
+  assert.throws(() => act(room, ghostId(room), { t: "gmove", to: "hall1" }), /聖水/);
+}
+
+{
+  // Before the revival, holy water stays a room item.
+  const room = newGame();
+  room.hunters[0].items = [{ id: "hw3", kind: "holywater" }];
+  toHunters(room);
+  assert.throws(() => act(room, "host", { t: "use", item: "hw3" }), /廊下には置けません/);
+}
+
+{
   // Saved by the doll while holding the spear: 2 damage back on the spot.
   const room = newGame();
   room.ghost.revived = true;

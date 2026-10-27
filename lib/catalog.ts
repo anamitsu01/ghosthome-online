@@ -45,7 +45,7 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   bell: { kind: "bell", name: "聖なる鈴", icon: "🔔", use: "room", retrievable: true, desc: "部屋に設置。幽霊がその部屋に入るたびに鳴り、人間全員に知らせる(鳴ったことは幽霊にも分かる)。" },
   kenchi: { kind: "kenchi", name: "検知鬼くん", icon: "👹", use: "self", uses: 1, desc: "幽霊のいる部屋が分かる。同じ部屋なら潜伏場所まで分かる。使い捨て。使ったことは幽霊にも伝わる。" },
   doll: { kind: "doll", name: "身代わり人形", icon: "🧸", use: "passive", desc: "完全復活した幽霊の攻撃を1度だけ防ぐ。防ぐと消える(獣の槍も持っていれば、その場で幽霊に2ダメージ)。" },
-  holywater: { kind: "holywater", name: "聖水", icon: "💧", use: "room", desc: "今いる部屋に撒く。次の幽霊ターンが終わるまで幽霊はその部屋に入れない。幽霊が部屋にいれば1ダメージ。" },
+  holywater: { kind: "holywater", name: "聖水", icon: "💧", use: "room", desc: "今いる部屋(幽霊の完全復活後は廊下も)に撒く。次の幽霊ターンが終わるまで幽霊はそこに入れない。幽霊がそこにいれば1ダメージ。" },
   crystal: { kind: "crystal", name: "水晶玉", icon: "🔮", use: "passive", desc: "人間の誰かが持っていれば、幽霊のサイコロの目がいつも見える。" },
   sword: { kind: "sword", name: "勾玉の剣", icon: "🗡️", use: "passive", desc: "完全復活した幽霊のいる部屋・廊下に入ると1ダメージ(獣の槍と両方持っていても2)。" },
   gambler: { kind: "gambler", name: "ギャンブラーのサイコロ", icon: "🎲", use: "self", uses: 3, desc: "使った次の自分のターン、サイコロが1個増える。3回まで。" },
