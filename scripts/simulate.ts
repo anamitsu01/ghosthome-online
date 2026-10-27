@@ -1,7 +1,7 @@
 // Checks a few rules on hand-set situations, then plays random bot games and prints statistics.
 import assert from "node:assert/strict";
 import { act, addBot, botAct, createRoom, pendingBot, startGame, updateSettings, viewFor } from "../lib/gameEngine";
-import { GHOST_ADJ, HUMAN_ADJ, SPOT, SPOTS, phoneAllows } from "../lib/map";
+import { GHOST_ADJ, HUMAN_ADJ, SPOT, SPOTS, isHall, phoneAllows } from "../lib/map";
 import type { Item, RoomState } from "../lib/types";
 
 // ---------- map ----------
@@ -27,7 +27,7 @@ for (let i = 0; i < 200; i++) {
   assert.equal(ghostSpots.length, 3);
   assert.ok(ghostSpots.filter((s) => s.cost === 3).length >= 2);
   assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "human").length, 15);
-  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 7);
+  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 8);
   const flash = SPOTS.find((s) => {
     const c = room.spots[s.id];
     return c?.type === "human" && c.item.kind === "flashlight";
@@ -141,6 +141,14 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   assert.ok(room.ghost.revived);
   assert.equal(room.ghost.hp, 3);
   assert.ok(viewFor(room, "host").ghost, "revived ghost is visible to humans");
+  // It moves again at once on 2 dice, out of the room, but may not search again.
+  assert.equal(room.turn.step, "roll");
+  act(room, ghostId(room), { t: "roll" });
+  assert.equal(room.turn.dice.length, 2);
+  assert.throws(() => act(room, ghostId(room), { t: "search", spot: "attic-1" }));
+  room.turn.budget = 2;
+  act(room, ghostId(room), { t: "gmove", to: "kids-1" });
+  assert.equal(room.ghost.loc, "kids");
   // Revived: a human with the doll survives, the others in the room die.
   act(room, ghostId(room), { t: "end" });
   room.hunters[0].loc = "kids";
@@ -176,6 +184,12 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   room.turn.budget = 6;
   act(room, ghostId(room), { t: "search", spot: "attic-1" });
   assert.equal(room.ghost.revived, true);
+  act(room, ghostId(room), { t: "roll" });
+  act(room, ghostId(room), { t: "end" });
+  // From its next turn on: 3 dice.
+  while (room.turn.side === "human") act(room, room.hunters[room.turn.hunter].controller, { t: "end" });
+  act(room, ghostId(room), { t: "roll" });
+  assert.equal(room.turn.dice.length, 3);
 }
 
 {
@@ -645,6 +659,16 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   assert.equal(a.loc, "bath", "through the wall");
   act(room, "host", { t: "end" });
   assert.equal(a.wallwalk, true, "until this hunter's next turn starts");
+}
+
+{
+  // 暗闇の穴: every human into one random room.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "hole", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "hole" });
+  const where = room.hunters[0].loc;
+  assert.ok(room.hunters.every((h) => h.loc === where) && !isHall(where));
+  assert.equal(room.logs.at(-1)!.event, "hole");
 }
 
 {

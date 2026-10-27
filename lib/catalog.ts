@@ -89,7 +89,7 @@ export const GHOST_ITEMS: Record<GhostItemName, { name: string; icon: string }> 
 export const GHOST_ITEM_NAMES: GhostItemName[] = ["bracelet", "jewel", "knife"];
 
 /** The ghost's own tools: found in hiding spots like everything else, usable only by the ghost. */
-export type GhostToolKind = "scrap" | "tablet" | "jizo" | "phone" | "letter" | "stairs" | "twins";
+export type GhostToolKind = "scrap" | "tablet" | "jizo" | "phone" | "letter" | "stairs" | "twins" | "hole";
 export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; desc: string; uses: number }> = {
   scrap: { name: "焼け焦げた切れ端", icon: "🔥", desc: "幽霊の体力を1回復する(最大まで)。使い捨て。", uses: 1 },
   tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を2人ランダムに選び、次のターン行動不能にする。3回まで(1ターン1回)。", uses: 3 },
@@ -107,6 +107,7 @@ export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; de
     uses: 1,
   },
   stairs: { name: "十三階段の思い出", icon: "🪜", desc: "人間はこの先2ターンの間、階を移動できない(階段が使えない)。使い捨て。", uses: 1 },
+  hole: { name: "暗闇の穴", icon: "🕳️", desc: "人間全員を、ランダムに選ばれた1つの部屋へ引きずり込む。使い捨て。", uses: 1 },
   twins: {
     name: "双子の幽霊",
     icon: "👥",
@@ -114,7 +115,7 @@ export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; de
     uses: 1,
   },
 };
-export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo", "phone", "letter", "stairs", "twins"];
+export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo", "phone", "letter", "stairs", "twins", "hole"];
 /** The ghost carries at most this many tools (its revival items don't count). */
 export const GHOST_TOOL_LIMIT = 2;
 

@@ -225,7 +225,7 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
           {myTurn && room.phase === "playing" && (ghostTurn ? ghostStep === "roll" : turn.step === "roll" && !psychicMode) && (
             <RollButton
               anchor={boardRef}
-              diceCount={ghostTurn ? (ghost?.revived ? 3 : 2) : hunterDice(active!)}
+              diceCount={ghostTurn ? (ghost?.revived && !turn.dash ? 3 : 2) : hunterDice(active!)}
               label={escape ? "逃走のサイコロを振る" : "サイコロを振る"}
               note={escape ? "見つかった! 振り直して逃げる" : ghostTurn ? undefined : `${CHARACTERS[active!.character].name}の番`}
               onRoll={() => send({ t: "roll" })}
@@ -438,7 +438,7 @@ function QuickActions({
       const inRoom = sel && sel.room === g.loc;
       body = (
         <>
-          {inRoom && !escape && step === "move" ? (
+          {inRoom && !escape && step === "move" && !turn.searched ? (
             <>
               <p className="font-bold text-ink">{sel.name}</p>
               {sel.id !== g.spot && <QBtn onClick={() => send({ t: "gmove", to: sel.id })}>ここへ移る(0)</QBtn>}
@@ -1033,6 +1033,18 @@ function FoundPopup({ room }: { room: ClientRoom }) {
   const place = entry?.spot ? spotName(entry.spot) : entry?.loc ? locName(entry.loc) : undefined;
   const isGhost = room.viewerSide === "ghost";
   if (entry?.event === "noise") return <NoisePopup spot={entry.spot} loc={entry.loc} locs={entry.locs} onClose={close} />;
+  if (entry?.event === "hole") {
+    return (
+      <InfoPopup
+        icon={<span className="gh-shake inline-block">🕳️</span>}
+        title={isGhost ? "暗闇の穴が人間を飲み込んだ!" : "暗闇の穴に落ちた!"}
+        place={place}
+        note={isGhost ? "人間は全員この部屋へ落ちた。" : "人間は全員この部屋へ引きずり込まれた。"}
+        tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
   if (entry?.event === "stairs") {
     return (
       <InfoPopup

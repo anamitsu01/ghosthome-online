@@ -108,6 +108,8 @@ export interface TurnState {
   resolveSpot: string | null;
   /** Ghost was damaged by this hunter's search: it escapes once the turn ends. */
   pendingEscape: boolean;
+  /** The ghost has just fully revived: it rolls 2 dice and moves again at once (no more searching). */
+  dash?: boolean;
   /** Locations passed this turn (drawn as a trail). */
   path: LocId[];
 }
@@ -135,7 +137,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter" | "stairs" | "twins" | "floor";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter" | "stairs" | "twins" | "floor" | "hole";
   /** Damage dealt, for a hit. */
   amount?: number;
   /** Several places at once (a noise with the 双子の幽霊's fakes). */

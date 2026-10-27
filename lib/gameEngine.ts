@@ -513,8 +513,13 @@ function ghostHide(room: RoomState, normalTurn: boolean): void {
   }
 }
 
+/** After searching the ghost stays in its room — except right after the full revival. */
+function stuckInRoom(room: RoomState): boolean {
+  return room.turn.searched && !room.turn.dash;
+}
+
 function ghostRoll(room: RoomState): void {
-  const dice = rollDice(ghostDice(room));
+  const dice = rollDice(room.turn.dash ? 2 : ghostDice(room));
   room.turn.dice = dice;
   room.turn.budget = sum(dice);
   room.turn.step = "move";
@@ -522,7 +527,7 @@ function ghostRoll(room: RoomState): void {
 }
 
 function ghostMove(room: RoomState, to: string): void {
-  const step = ghostStepCost(room, to, room.turn.searched);
+  const step = ghostStepCost(room, to, stuckInRoom(room));
   if (typeof step === "string") throw new GameError(step);
   if (step.cost > room.turn.budget) throw new GameError(`移動力が足りません(必要 ${step.cost})`);
   room.turn.budget -= step.cost;
@@ -603,6 +608,10 @@ function ghostSearch(room: RoomState, spotId: string): void {
     g.revived = true;
     g.hp += 1;
     log(room, "all", `🟥 幽霊が完全復活した! 居場所は ${spotName(g.spot!)}`, "bad", { spot: g.spot!, event: "revive" });
+    // It moves again at once, on 2 dice (3 from its next turn).
+    room.turn.step = "roll";
+    room.turn.dash = true;
+    log(room, "ghost", "力が完全に戻った! すぐにサイコロ2個で動ける(探索はできない)", "bad");
   } else {
     log(room, "ghost", "…何も起きない。どれかが偽物だったようだ。", "warn");
   }
@@ -692,6 +701,10 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind, door?: string): vo
     const content = room.spots[s.id];
     room.ghostKnow[s.id] = known(content);
     log(room, "ghost", `✉️ 死者からの手紙: ${spotName(s.id)}には${describe(content)}`, "info", { spot: s.id, event: "letter", found: known(content) });
+  } else if (kind === "hole") {
+    const target = pick(ROOM_IDS);
+    for (const h of aliveHunters(room)) arriveHunter(room, h, target);
+    log(room, "all", `🕳️ 暗闇の穴が開いた! 人間たちは全員${ROOM[target].name}へ落ちていった`, "bad", { loc: target, event: "hole" });
   } else if (kind === "stairs") {
     // Through the humans' next two rounds.
     room.stairsUntil = room.ghostTurns + 3;
@@ -1351,6 +1364,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     if (ready("jizo") && Math.random() < 0.3) return step({ t: "gtool", kind: "jizo", door: pick(DOOR_IDS) });
     if (ready("phone") && !room.phone && Math.random() < 0.3) return step({ t: "gtool", kind: "phone" });
     if (ready("stairs") && Math.random() < 0.3) return step({ t: "gtool", kind: "stairs" });
+    if (ready("hole") && Math.random() < 0.3) return step({ t: "gtool", kind: "hole" });
     if (ready("twins") && !room.twins && Math.random() < 0.5) return step({ t: "gtool", kind: "twins" });
     if (ready("letter") && SPOTS.some((s) => !room.ghostKnow[s.id]) && Math.random() < 0.5) return step({ t: "gtool", kind: "letter" });
     if (t.step === "resolve") {
@@ -1363,7 +1377,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     if (t.step === "warp") return step({ t: "warp", spot: pick(SPOTS.filter((s) => !holyBlocked(room, s.room))).id });
     if (t.step === "move") {
       const here = SPOTS.filter((s) => s.room === room.ghost.loc);
-      const affordable = here.filter((s) => ghostSearchCost(room, s.id) <= t.budget);
+      const affordable = t.searched ? [] : here.filter((s) => ghostSearchCost(room, s.id) <= t.budget);
       if (affordable.length && Math.random() < 0.55) return step({ t: "search", spot: pick(affordable).id });
       return ghostWander(room, t.budget, true) ?? step({ t: "end" });
     }
@@ -1395,7 +1409,7 @@ export function botAct(room: RoomState, actorId: string): RoomState {
 function ghostWander(room: RoomState, budget: number, normalTurn: boolean): RoomState | null {
   if (Math.random() < 0.15) return null;
   const options = [...SPOTS.map((s) => s.id), "hall1", "hall2"]
-    .map((to) => ({ to, step: ghostStepCost(room, to, normalTurn && room.turn.searched) }))
+    .map((to) => ({ to, step: ghostStepCost(room, to, normalTurn && stuckInRoom(room)) }))
     .filter((o): o is { to: string; step: GhostStep } => typeof o.step !== "string" && o.step.cost > 0 && o.step.cost <= budget);
   if (!options.length) return null;
   return act(room, room.ghostPlayer, { t: "gmove", to: pick(options).to });
