@@ -2,7 +2,6 @@
 
 export type HumanItemKind =
   | "bell"
-  | "ofuda"
   | "kenchi"
   | "doll"
   | "holywater"
@@ -13,7 +12,10 @@ export type HumanItemKind =
   | "candle"
   | "mirror"
   | "redbeads"
-  | "bluebeads";
+  | "bluebeads"
+  | "ticket"
+  | "kenchiWeak"
+  | "scroll";
 export type HiddenItemKind = "stone" | "spear";
 /** "fake": the magician's fake ghost item. */
 export type ItemKind = HumanItemKind | HiddenItemKind | "fake";
@@ -23,6 +25,7 @@ export type GhostItemName = "bracelet" | "jewel" | "knife";
 export type ItemUse =
   | "room" // placed in the current room
   | "spot" // placed on a hiding spot in the current room
+  | "trade" // takes an item from a teammate anywhere
   | "self" // used on the spot, no target
   | "passive"; // works just by being held
 
@@ -40,8 +43,7 @@ export interface ItemDef {
 
 export const ITEMS: Record<ItemKind, ItemDef> = {
   bell: { kind: "bell", name: "聖なる鈴", icon: "🔔", use: "room", retrievable: true, desc: "部屋に設置。幽霊がその部屋に入るたびに鳴り、人間全員に知らせる(鳴ったことは幽霊にも分かる)。" },
-  ofuda: { kind: "ofuda", name: "落魂札", icon: "📜", use: "spot", retrievable: true, desc: "潜伏場所に設置。幽霊がその場所を通る(止まる・ワープで来る)と1ダメージ。発動すると消える。" },
-  kenchi: { kind: "kenchi", name: "検知鬼くん", icon: "👹", use: "self", uses: 3, desc: "幽霊のいる部屋が分かる。同じ部屋なら潜伏場所まで分かる。3回まで。使ったことは幽霊にも伝わる。" },
+  kenchi: { kind: "kenchi", name: "検知鬼くん", icon: "👹", use: "self", uses: 1, desc: "幽霊のいる部屋が分かる。同じ部屋なら潜伏場所まで分かる。使い捨て。使ったことは幽霊にも伝わる。" },
   doll: { kind: "doll", name: "身代わり人形", icon: "🧸", use: "passive", desc: "完全復活した幽霊の攻撃を1度だけ防ぐ。防ぐと消える。" },
   holywater: { kind: "holywater", name: "聖水", icon: "💧", use: "room", desc: "今いる部屋に撒く。次の幽霊ターンが終わるまで幽霊はその部屋に入れない。幽霊が部屋にいれば1ダメージ。" },
   crystal: { kind: "crystal", name: "水晶玉", icon: "🔮", use: "passive", desc: "人間の誰かが持っていれば、幽霊のサイコロの目がいつも見える。" },
@@ -51,6 +53,9 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   candle: { kind: "candle", name: "マッチと蝋燭", icon: "🕯️", use: "room", desc: "今いる部屋に設置。幽霊がその部屋で探索するコストが+2(ゲーム終了まで)。幽霊は部屋に入ると気づく。使い捨て。" },
   mirror: { kind: "mirror", name: "手鏡", icon: "🪞", use: "spot", retrievable: true, desc: "潜伏場所に設置。幽霊がそこに潜伏すると、次の幽霊ターンはその部屋から出られない。" },
   redbeads: { kind: "redbeads", name: "赤い数珠", icon: "📿", use: "passive", desc: "青い数珠と両方持っていればサイコロ+1。" },
+  ticket: { kind: "ticket", name: "遠隔取引券", icon: "🎫", use: "trade", desc: "どこにいる仲間からでもアイテムを1つもらえる(券と入れ替わりで手に入る)。使い捨て。" },
+  kenchiWeak: { kind: "kenchiWeak", name: "検知鬼くん(弱)", icon: "👺", use: "self", uses: 1, desc: "幽霊が1階と2階のどちらにいるかが分かる。使い捨て。使ったことは幽霊にも伝わる。" },
+  scroll: { kind: "scroll", name: "壁抜けの巻物", icon: "📜", use: "self", desc: "使ったターンの間、幽霊と同じように壁を抜けて移動できる。使い捨て。" },
   bluebeads: { kind: "bluebeads", name: "青い数珠", icon: "🧿", use: "passive", desc: "赤い数珠と両方持っていればサイコロ+1。" },
   stone: { kind: "stone", name: "正邪の秘石", icon: "💎", use: "passive", desc: "隠しアイテム。完全復活した幽霊に殺されるとき1ダメージを返す。" },
   spear: { kind: "spear", name: "獣の槍", icon: "🔱", use: "passive", desc: "隠しアイテム。幽霊を探索で見つけたときのダメージが2になる(復活前も後も)。" },
@@ -59,7 +64,6 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
 
 export const HUMAN_ITEM_KINDS: HumanItemKind[] = [
   "bell",
-  "ofuda",
   "kenchi",
   "doll",
   "holywater",
@@ -71,6 +75,9 @@ export const HUMAN_ITEM_KINDS: HumanItemKind[] = [
   "mirror",
   "redbeads",
   "bluebeads",
+  "ticket",
+  "kenchiWeak",
+  "scroll",
 ];
 export const HIDDEN_ITEM_KINDS: HiddenItemKind[] = ["stone", "spear"];
 
@@ -82,10 +89,10 @@ export const GHOST_ITEMS: Record<GhostItemName, { name: string; icon: string }> 
 export const GHOST_ITEM_NAMES: GhostItemName[] = ["bracelet", "jewel", "knife"];
 
 /** The ghost's own tools: found in hiding spots like everything else, usable only by the ghost. */
-export type GhostToolKind = "scrap" | "tablet" | "jizo" | "phone" | "letter";
+export type GhostToolKind = "scrap" | "tablet" | "jizo" | "phone" | "letter" | "stairs" | "twins";
 export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; desc: string; uses: number }> = {
   scrap: { name: "焼け焦げた切れ端", icon: "🔥", desc: "幽霊の体力を1回復する(最大まで)。使い捨て。", uses: 1 },
-  tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を1人ランダムに選び、次のターン行動不能にする。3回まで(1ターン1回)。", uses: 3 },
+  tablet: { name: "地縛霊の石板", icon: "🪦", desc: "人間を2人ランダムに選び、次のターン行動不能にする。3回まで(1ターン1回)。", uses: 3 },
   jizo: { name: "首無し地蔵", icon: "🗿", desc: "扉を1つ選び、次の幽霊ターンが終わるまで人間が通れないようにする。使い捨て。", uses: 1 },
   phone: {
     name: "あの世の電話",
@@ -94,13 +101,20 @@ export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; de
     uses: 1,
   },
   letter: {
-    name: "赤い手紙",
+    name: "死者からの手紙",
     icon: "✉️",
     desc: "まだ探索していない潜伏場所を1つランダムに選び、何があるか(何もないか)が分かる。仕掛けられた札や手鏡は分からない。使い捨て。",
     uses: 1,
   },
+  stairs: { name: "十三階段の思い出", icon: "🪜", desc: "人間はこの先2ターンの間、階を移動できない(階段が使えない)。使い捨て。", uses: 1 },
+  twins: {
+    name: "双子の幽霊",
+    icon: "👥",
+    desc: "次に気配が人間に伝わるとき、本当の部屋に加えてランダムな2部屋からも気配がする。使い捨て。",
+    uses: 1,
+  },
 };
-export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo", "phone", "letter"];
+export const GHOST_TOOL_KINDS: GhostToolKind[] = ["scrap", "tablet", "jizo", "phone", "letter", "stairs", "twins"];
 /** The ghost carries at most this many tools (its revival items don't count). */
 export const GHOST_TOOL_LIMIT = 2;
 

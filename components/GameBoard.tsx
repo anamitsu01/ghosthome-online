@@ -11,6 +11,7 @@ import {
   SPOT,
   SPOTS,
   doorId,
+  floorOf,
   isHall,
   locName,
   phoneAllows,
@@ -60,7 +61,9 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
   // Flash the places mentioned by log entries newer than what has been shown.
   const newest = room.logs.length ? room.logs[room.logs.length - 1].seq : 0;
   const [seenSeq, setSeenSeq] = useState(newest);
-  const flashes = room.logs.filter((l) => l.seq > seenSeq && (l.loc || l.spot)).map((l) => ({ loc: l.loc, spot: l.spot, seq: l.seq }));
+  const flashes = room.logs
+    .filter((l) => l.seq > seenSeq && (l.loc || l.spot || l.locs))
+    .flatMap((l) => [{ loc: l.loc, spot: l.spot, seq: l.seq }, ...(l.locs ?? []).map((loc) => ({ loc, seq: l.seq }))]);
   useEffect(() => {
     if (newest <= seenSeq) return;
     const timer = setTimeout(() => setSeenSeq(newest), FLASH_MS);
@@ -127,15 +130,25 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
     if (active) {
       if (psychicMode) {
         (Object.keys(HUMAN_ADJ) as LocId[])
-          .filter((l) => l !== active.loc && (!room.phone || isHall(l) || l === "attic"))
+          .filter(
+            (l) =>
+              l !== active.loc &&
+              (!room.phone || isHall(l) || l === "attic") &&
+              (!room.stairsBlocked || floorOf(l) === floorOf(active.loc))
+          )
           .forEach((l) => t.add(l));
         return [t, lit];
       }
       if (turn.step === "resolve") return [t, lit];
       const shut = new Set(room.doorBlocks.map((d) => d.door));
       if (turn.step === "move" && budget >= MOVE_COST)
-        HUMAN_ADJ[active.loc]
-          .filter((l) => !shut.has(doorId(active.loc, l)) && (!room.phone || phoneAllows(active.loc, l)))
+        (active.wallwalk ? GHOST_ADJ : HUMAN_ADJ)[active.loc]
+          .filter(
+            (l) =>
+              !(HUMAN_ADJ[active.loc].includes(l) && shut.has(doorId(active.loc, l))) &&
+              (!room.phone || phoneAllows(active.loc, l)) &&
+              !(room.stairsBlocked && isHall(active.loc) && isHall(l))
+          )
           .forEach((l) => t.add(l));
       if (!isHall(active.loc)) SPOTS.filter((s) => s.room === active.loc).forEach((s) => t.add(s.id));
     }
@@ -276,6 +289,16 @@ function TurnBanner({ room, actorName, myTurn }: { room: ClientRoom; actorName: 
       {room.phone && (
         <span className="gh-flicker rounded-full border border-red-500/60 bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-300">
           📞 あの世の電話: 屋根裏部屋に誰かが入るまで人間は部屋に入れない
+        </span>
+      )}
+      {room.stairsBlocked && (
+        <span className="rounded-full border border-red-500/60 bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-300">
+          🪜 十三階段の思い出: 人間は階を移動できない
+        </span>
+      )}
+      {turn.side === "human" && !escape && room.hunters[turn.hunter]?.wallwalk && (
+        <span className="rounded-full border border-emerald-400/60 bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-300">
+          📜 壁抜け中: このターンは壁を抜けて動ける
         </span>
       )}
       {dice && dice.length > 0 && (
@@ -620,6 +643,37 @@ function HunterControls({
 
 function ItemList({ hunter, room, send }: { hunter: ClientHunter; room: ClientRoom; send: (a: Action) => Promise<string | null> }) {
   const items = hunter.items ?? [];
+  const [ticket, setTicket] = useState<string | null>(null);
+  if (ticket && items.some((i) => i.id === ticket)) {
+    const mates = room.hunters.filter((h) => h.alive && h.slot !== hunter.slot && (h.items ?? []).length);
+    return (
+      <div className="rounded-lg border border-gold/40 p-2 text-xs">
+        <p className="mb-1 text-white/70">🎫 遠隔取引券: どの仲間の何をもらう?</p>
+        {mates.length === 0 && <p className="text-white/40">アイテムを持っている仲間がいません</p>}
+        {mates.map((m) => (
+          <div key={m.slot} className="mb-1 flex flex-wrap items-center gap-1">
+            <span className="mr-1">{CHARACTERS[m.character].name}:</span>
+            {(m.items ?? []).map((i) => (
+              <button
+                key={i.id}
+                className="rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10"
+                onClick={() => {
+                  setTicket(null);
+                  send({ t: "use", item: ticket, from: m.slot, take: i.id });
+                }}
+              >
+                {ITEMS[i.kind].icon}
+                {ITEMS[i.kind].name}
+              </button>
+            ))}
+          </div>
+        ))}
+        <button className="rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10" onClick={() => setTicket(null)}>
+          やめる
+        </button>
+      </div>
+    );
+  }
   if (!items.length) return <p className="text-white/40">持ち物なし(最大{capacity(hunter)}つ)</p>;
   return (
     <div>
@@ -629,7 +683,7 @@ function ItemList({ hunter, room, send }: { hunter: ClientHunter; room: ClientRo
       <ul className="space-y-1">
         {items.map((i) => {
           const d = ITEMS[i.kind];
-          const usable = d.use === "room" || d.use === "self";
+          const usable = d.use === "room" || d.use === "self" || d.use === "trade";
           const used = room.usedThisRound.includes(i.id);
           return (
             <li key={i.id} className="flex items-center gap-2 rounded-lg bg-white/5 px-2 py-1">
@@ -641,7 +695,7 @@ function ItemList({ hunter, room, send }: { hunter: ClientHunter; room: ClientRo
               {usable && (
                 <button
                   disabled={used || (d.use === "room" && isHall(hunter.loc))}
-                  onClick={() => send({ t: "use", item: i.id })}
+                  onClick={() => (d.use === "trade" ? setTicket(i.id) : send({ t: "use", item: i.id }))}
                   className="ml-auto rounded-full bg-violet/70 px-3 py-0.5 text-xs font-bold disabled:opacity-30"
                 >
                   {d.use === "room" ? "この部屋に使う" : "使う"}
@@ -661,7 +715,6 @@ function PlacedHere({ room, hunter, send }: { room: ClientRoom; hunter: ClientHu
   if (!p || isHall(hunter.loc)) return null;
   const here: Item[] = [
     ...p.bells.filter((b) => b.room === hunter.loc).map((b) => b.item),
-    ...p.ofuda.filter((o) => SPOT[o.spot].room === hunter.loc).map((o) => o.item),
     ...p.mirrors.filter((m) => SPOT[m.spot].room === hunter.loc).map((m) => m.item),
   ];
   if (!here.length) return null;
@@ -776,7 +829,7 @@ function ResolveModal({
     : (hunter.items ?? []).map((i) => ({
         id: i.id,
         label: `${ITEMS[i.kind].icon} ${ITEMS[i.kind].name}`,
-        trap: i.kind === "ofuda" || i.kind === "mirror",
+        trap: i.kind === "mirror",
       }));
   const limit = ghostSide ? GHOST_TOOL_LIMIT : capacity(hunter);
   const found =
@@ -927,7 +980,7 @@ function Legend({ side }: { side: ClientRoom["viewerSide"] }) {
   return (
     <p className="mt-2 px-1 text-xs leading-relaxed text-white/40">
       <span className="text-[#e0b85a]">┅</span> 出入口(人間はここしか通れない。幽霊は壁も抜ける)
-      ・ <span className="text-gold">●</span>の数字 = {side === "ghost" ? "幽霊" : "人間"}の探索コスト ・ <span className="font-black text-red-500">✕</span>何もなかった ・ 📜落魂札 🪞手鏡 🔔鈴 💧聖水 🕯️蝋燭 ❔隠しアイテムの部屋 ✨見つけた隠しアイテム
+      ・ <span className="text-gold">●</span>の数字 = {side === "ghost" ? "幽霊" : "人間"}の探索コスト ・ <span className="font-black text-red-500">✕</span>何もなかった ・ 🪞手鏡 🔔鈴 💧聖水 🕯️蝋燭 ❔隠しアイテムの部屋 ✨見つけた隠しアイテム
       {side === "human" && " ・ 👣巫女が見た幽霊の探索跡"}
     </p>
   );
@@ -977,9 +1030,43 @@ function FoundPopup({ room }: { room: ClientRoom }) {
   const close = () => entry && setSeen(entry.seq);
   if (entry?.event === "revive") return <RevivePopup room={room} spot={entry.spot} onClose={close} />;
   if (entry?.event === "hit") return <HitPopup room={room} spot={entry.spot} amount={entry.amount ?? 1} text={entry.text} onClose={close} />;
-  if (entry?.event === "noise") return <NoisePopup spot={entry.spot} loc={entry.loc} onClose={close} />;
   const place = entry?.spot ? spotName(entry.spot) : entry?.loc ? locName(entry.loc) : undefined;
   const isGhost = room.viewerSide === "ghost";
+  if (entry?.event === "noise") return <NoisePopup spot={entry.spot} loc={entry.loc} locs={entry.locs} onClose={close} />;
+  if (entry?.event === "stairs") {
+    return (
+      <InfoPopup
+        icon={<span className="gh-shake inline-block">🪜</span>}
+        title="十三階段の思い出…"
+        note={isGhost ? "この先2ターンの間、人間は階を移動できない。" : "階段が十三段に見える…この先2ターンの間、階を移動できない。"}
+        tone={isGhost ? "good" : "bad"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "twins") {
+    return (
+      <InfoPopup
+        icon="👥"
+        title="双子の幽霊が控えている"
+        note="次に気配が人間に伝わるとき、ほかの2部屋からも気配がする。"
+        tone="good"
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "floor") {
+    return (
+      <InfoPopup
+        icon="👺"
+        title={isGhost ? "検知鬼くん(弱)に気づかれた!" : "検知鬼くん(弱)の反応"}
+        place={`${entry.floor}階`}
+        note={isGhost ? `${entry.floor}階にいることを人間に知られた。` : `幽霊は${entry.floor}階のどこかにいる。`}
+        tone={isGhost ? "bad" : "good"}
+        onClose={close}
+      />
+    );
+  }
   if (entry?.event === "kenchi") {
     return (
       <InfoPopup
@@ -1057,7 +1144,7 @@ function FoundPopup({ room }: { room: ClientRoom }) {
     return (
       <InfoPopup
         icon="✉️"
-        title="赤い手紙が告げる…"
+        title="死者からの手紙が告げる…"
         place={place}
         note={`ここには「${what}」。`}
         tone={f.type === "ghost" || f.type === "tool" ? "good" : "dull"}
@@ -1066,13 +1153,12 @@ function FoundPopup({ room }: { room: ClientRoom }) {
     );
   }
   if (entry?.event === "trap") {
-    const ofuda = entry.text.includes("落魂札");
     return (
       <InfoPopup
-        icon={<span className="gh-shake inline-block">{ofuda ? "📜" : "💧"}</span>}
-        title={ofuda ? "落魂札が発動した!" : "聖水が幽霊を焼いた!"}
+        icon={<span className="gh-shake inline-block">💧</span>}
+        title="聖水が幽霊を焼いた!"
         place={place}
-        note={`幽霊に${entry.amount ?? 1}ダメージ!${isGhost ? "" : ofuda ? " 幽霊はこの場所を通った。" : " 幽霊はこの部屋にいた。"}`}
+        note={`幽霊に${entry.amount ?? 1}ダメージ!${isGhost ? "" : " 幽霊はこの部屋にいた。"}`}
         tone={isGhost ? "bad" : "good"}
         onClose={close}
       />

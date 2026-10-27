@@ -144,7 +144,8 @@ export function HitPopup({
 }
 
 /** The humans heard the ghost searching somewhere near. */
-export function NoisePopup({ spot, loc, onClose }: { spot?: string; loc?: LocId; onClose: () => void }) {
+export function NoisePopup({ spot, loc, locs, onClose }: { spot?: string; loc?: LocId; locs?: LocId[]; onClose: () => void }) {
+  const many = locs && locs.length > 1;
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div
@@ -155,11 +156,13 @@ export function NoisePopup({ spot, loc, onClose }: { spot?: string; loc?: LocId;
         <div className="my-3 flex justify-center">
           <GhostSprite color={GHOST_COLORS[0]} size={90} className="gh-fade-ghost" />
         </div>
-        <p className="text-2xl font-black">{spot ? spotName(spot) : loc ? locName(loc) : ""}</p>
+        <p className="text-2xl font-black">{many ? locs.map(locName).join("・") : spot ? spotName(spot) : loc ? locName(loc) : ""}</p>
         <p className="mt-3 text-sm leading-relaxed text-white/70">
-          {spot
-            ? "同じ部屋で、何かがここを探っていた。"
-            : "この部屋で何かが探っていた。近くにいたので部屋までは分かったが、どこを探ったかまでは分からない。"}
+          {many
+            ? "いくつもの部屋から同時に気配がする…本物はどれか1つだけ。"
+            : spot
+              ? "同じ部屋で、何かがここを探っていた。"
+              : "この部屋で何かが探っていた。近くにいたので部屋までは分かったが、どこを探ったかまでは分からない。"}
         </p>
         <button onClick={onClose} className="mt-4 rounded-full bg-violet px-8 py-2 font-bold text-white hover:brightness-110">
           OK

@@ -25,6 +25,7 @@ import {
   SPOTS,
   doorId,
   doorName,
+  floorOf,
   hearsFrom,
   phoneAllows,
   isHall,
@@ -112,6 +113,8 @@ function emptyGame(): Pick<
   | "ghostCandles"
   | "doorBlocks"
   | "phone"
+  | "stairsUntil"
+  | "twins"
   | "turn"
   | "escape"
   | "ghostTurns"
@@ -129,13 +132,15 @@ function emptyGame(): Pick<
     ghost: { loc: "hall1", spot: null, hp: 1, collected: 0, real: 0, revived: false, held: [], tools: [], startSpot: "" },
     spots: {},
     hidden: null,
-    placed: { bells: [], ofuda: [], mirrors: [], holy: [], candles: [] },
+    placed: { bells: [], mirrors: [], holy: [], candles: [] },
     humanKnow: { spots: {}, hiddenRoom: null, hiddenFound: false, ghostSearched: [] },
     ghostKnow: {},
     ghostSearchedAll: [],
     ghostCandles: [],
     doorBlocks: [],
     phone: false,
+    stairsUntil: 0,
+    twins: false,
     turn: { round: 0, side: "ghost", hunter: 0, step: "roll", dice: [], budget: 0, searched: false, resolveSpot: null, pendingEscape: false, path: [] },
     escape: null,
     ghostTurns: 0,
@@ -216,7 +221,7 @@ function log(
   to: Audience,
   text: string,
   tone: Tone = "info",
-  where: Pick<LogEntry, "loc" | "spot" | "found" | "event" | "amount"> = {}
+  where: Pick<LogEntry, "loc" | "spot" | "found" | "event" | "amount" | "locs" | "floor"> = {}
 ): void {
   room.logs.push({ seq: ++room.logSeq, to, text, tone, ...where });
   room.logs = room.logs.slice(-LOGS_KEPT);
@@ -293,6 +298,7 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
     mediumUsed: false,
     gamblerNext: false,
     stunned: false,
+    wallwalk: false,
   }));
 
   // Ghost items: at least 2 of the 3 behind cost-3 spots, no other evening out.
@@ -471,14 +477,6 @@ function ghostArrive(room: RoomState, loc: LocId, spot: string | null, canKill: 
       log(room, "ghost", `🔔 ${ROOM[loc].name}に入ったら鈴が鳴った! 人間に居場所を知られた`, "bad", { loc, event: "bell" });
     }
   }
-  if (spot) {
-    const ofuda = room.placed.ofuda.find((o) => o.spot === spot);
-    if (ofuda) {
-      room.placed.ofuda = room.placed.ofuda.filter((o) => o !== ofuda);
-      log(room, "all", `📜 ${spotName(spot)}の落魂札が発動した!`, "warn", { spot });
-      if (damageGhost(room, 1, "落魂札の力で", { spot, event: "trap" })) return true;
-    }
-  }
   if (canKill && g.revived) {
     for (const h of aliveHunters(room).filter((x) => x.loc === loc)) {
       const doll = h.items.find((i) => i.kind === "doll");
@@ -546,9 +544,20 @@ function ghostSearch(room: RoomState, spotId: string): void {
   // Noise: same room hears the exact spot, the rooms around hear the room.
   const near = hearsFrom(spot.room);
   const sameRoom = aliveHunters(room).some((h) => h.loc === spot.room);
-  if (sameRoom) {
+  const heard = sameRoom || aliveHunters(room).some((h) => near.includes(h.loc));
+  if (heard && room.twins) {
+    // 双子の幽霊: two more rooms stir along with the real one.
+    room.twins = false;
+    const rooms = shuffle([spot.room, ...shuffle(ROOM_IDS.filter((r) => r !== spot.room)).slice(0, 2)]);
+    log(room, "human", `👻 気配… ${rooms.map((r) => ROOM[r].name).join("・")}で何かが動いた`, "warn", {
+      locs: rooms,
+      spot: sameRoom ? spotId : undefined,
+      event: "noise",
+    });
+    log(room, "ghost", `👥 双子の幽霊が騒ぎ立てた(${rooms.map((r) => ROOM[r].name).join("・")})`, "good");
+  } else if (sameRoom) {
     log(room, "human", `👻 気配! ${spotName(spotId)}で何かが探っている`, "warn", { spot: spotId, event: "noise" });
-  } else if (aliveHunters(room).some((h) => near.includes(h.loc))) {
+  } else if (heard) {
     log(room, "human", `👻 気配… ${ROOM[spot.room].name}で何かが動いた`, "warn", { loc: spot.room, event: "noise" });
   }
 
@@ -677,7 +686,15 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind, door?: string): vo
     const s = pick(unknown);
     const content = room.spots[s.id];
     room.ghostKnow[s.id] = known(content);
-    log(room, "ghost", `✉️ 赤い手紙: ${spotName(s.id)}には${describe(content)}`, "info", { spot: s.id, event: "letter", found: known(content) });
+    log(room, "ghost", `✉️ 死者からの手紙: ${spotName(s.id)}には${describe(content)}`, "info", { spot: s.id, event: "letter", found: known(content) });
+  } else if (kind === "stairs") {
+    // Through the humans' next two rounds.
+    room.stairsUntil = room.ghostTurns + 3;
+    log(room, "all", "🪜 十三階段の思い出…この先2ターンの間、人間は階を移動できない", "bad", { loc: "hall2", event: "stairs" });
+  } else if (kind === "twins") {
+    if (room.twins) throw new GameError("双子の幽霊はもう待っています");
+    room.twins = true;
+    log(room, "ghost", "👥 双子の幽霊が控えている。次に気配が伝わるとき、ほかの2部屋からも気配がする", "good", { event: "twins" });
   } else if (kind === "jizo") {
     if (!door || !DOOR_IDS.includes(door)) throw new GameError("塞ぐ扉を選んでください");
     // Shut through the humans' next round, until this ghost's next turn ends.
@@ -689,10 +706,10 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind, door?: string): vo
   } else {
     const targets = aliveHunters(room).filter((h) => !h.stunned);
     if (!targets.length) throw new GameError("呪える人間がいません");
-    const h = pick(targets);
-    h.stunned = true;
-    log(room, "all", `🪦 地縛霊の石板の呪い! ${hunterName(h)}は次のターン動けない(石板の残り${tool.uses - 1}回)`, "bad", {
-      loc: h.loc,
+    const cursed = shuffle(targets).slice(0, 2);
+    for (const h of cursed) h.stunned = true;
+    log(room, "all", `🪦 地縛霊の石板の呪い! ${cursed.map(hunterName).join("と")}は次のターン動けない(石板の残り${tool.uses - 1}回)`, "bad", {
+      loc: cursed[0].loc,
       event: "curse",
     });
   }
@@ -799,6 +816,11 @@ function startHunterTurn(room: RoomState, slot: number): void {
     pendingEscape: false,
     path: [room.hunters[slot].loc],
   };
+  room.hunters[slot].wallwalk = false;
+}
+
+function stairsBlocked(room: RoomState): boolean {
+  return room.ghostTurns < room.stairsUntil;
 }
 
 function nextHunter(room: RoomState): void {
@@ -906,6 +928,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       if (t.step !== "roll") throw new GameError("ワープはサイコロを振る前だけです");
       if (!(action.loc in HUMAN_ADJ) || action.loc === h.loc) throw new GameError("その場所には行けません");
       if (room.phone && !isHall(action.loc) && action.loc !== "attic") throw new GameError("あの世の電話が鳴っていて、部屋には入れません");
+      if (stairsBlocked(room) && floorOf(action.loc) !== floorOf(h.loc)) throw new GameError("十三階段の思い出で、階を移動できません");
       h.psychicUsed = true;
       log(room, "all", `🌀 超能力者が${locName(action.loc)}へワープした`, "info", { loc: action.loc });
       arriveHunter(room, h, action.loc);
@@ -913,8 +936,12 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
     }
     case "move": {
       if (t.step !== "move") throw new GameError("先にサイコロを振ってください");
-      if (!HUMAN_ADJ[h.loc].includes(action.loc)) throw new GameError("出入口でつながった隣の部屋・廊下にしか行けません");
-      if (doorBlocked(room, h.loc, action.loc)) throw new GameError("首無し地蔵に扉を塞がれていて通れません");
+      const adj = h.wallwalk ? GHOST_ADJ : HUMAN_ADJ;
+      if (!adj[h.loc].includes(action.loc)) {
+        throw new GameError(h.wallwalk ? "隣の部屋・廊下にしか行けません" : "出入口でつながった隣の部屋・廊下にしか行けません");
+      }
+      if (HUMAN_ADJ[h.loc].includes(action.loc) && doorBlocked(room, h.loc, action.loc)) throw new GameError("首無し地蔵に扉を塞がれていて通れません");
+      if (stairsBlocked(room) && isHall(h.loc) && isHall(action.loc)) throw new GameError("十三階段の思い出で、階を移動できません");
       if (room.phone && !phoneAllows(h.loc, action.loc)) throw new GameError("あの世の電話が鳴っていて、屋根裏部屋に誰かが入るまで部屋には入れません");
       if (MOVE_COST > t.budget) throw new GameError(`移動力が足りません(必要 ${MOVE_COST})`);
       t.budget -= MOVE_COST;
@@ -928,7 +955,7 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       resolveSearch(room, h, action.take, action.leave, !!action.setTrap);
       return;
     case "use":
-      applyItem(room, h, action.item, action.spot);
+      applyItem(room, h, action.item, action.spot, action.from, action.take);
       return;
     case "pickup":
       pickupPlaced(room, h, action.item);
@@ -1031,12 +1058,11 @@ function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: strin
   }
   if (leave && setTrap) {
     // A talisman or mirror let go of here is set on this spot as a trap.
-    if (leave.kind !== "ofuda" && leave.kind !== "mirror") throw new GameError("仕掛けられるのは落魂札と手鏡だけです");
+    if (leave.kind !== "mirror") throw new GameError("仕掛けられるのは手鏡だけです");
     h.items = h.items.filter((i) => i !== leave);
     room.usedThisRound.push(leave.id);
-    if (leave.kind === "ofuda") room.placed.ofuda.push({ spot: spotId, item: leave });
-    else room.placed.mirrors.push({ spot: spotId, item: leave });
-    log(room, "human", `${leave.kind === "ofuda" ? "📜" : "🪞"} ${spotName(spotId)}に${ITEMS[leave.kind].name}を仕掛けた`, "info", { spot: spotId });
+    room.placed.mirrors.push({ spot: spotId, item: leave });
+    log(room, "human", `🪞 ${spotName(spotId)}に${ITEMS[leave.kind].name}を仕掛けた`, "info", { spot: spotId });
   } else if (leave) {
     if (room.spots[spotId]) throw new GameError("そこにはもう物があります");
     h.items = h.items.filter((i) => i !== leave);
@@ -1057,7 +1083,7 @@ function resolveSearch(room: RoomState, h: Hunter, take: boolean, leaveId: strin
   nextHunter(room);
 }
 
-function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string): void {
+function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string, fromSlot?: number, takeId?: string): void {
   const item = h.items.find((i) => i.id === itemId);
   if (!item) throw new GameError("そのアイテムを持っていません");
   const def = ITEMS[item.kind];
@@ -1077,7 +1103,6 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string):
     case "candle":
       if (!inRoom) throw new GameError("廊下には置けません");
       break;
-    case "ofuda":
     case "mirror":
       if (!inRoom) throw new GameError("廊下には置けません");
       if (!spotId || SPOT[spotId]?.room !== h.loc) throw new GameError("今いる部屋の潜伏場所を選んでください");
@@ -1090,11 +1115,6 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string):
       drop();
       room.placed.bells.push({ room: r, item });
       log(room, "human", `🔔 ${ROOM[r].name}に聖なる鈴を設置した`, "info", { loc: r });
-      return;
-    case "ofuda":
-      drop();
-      room.placed.ofuda.push({ spot: spotId!, item });
-      log(room, "human", `📜 ${spotName(spotId!)}に落魂札を仕掛けた`, "info", { spot: spotId });
       return;
     case "mirror":
       drop();
@@ -1138,6 +1158,29 @@ function applyItem(room: RoomState, h: Hunter, itemId: string, spotId?: string):
       );
       return;
     }
+    case "kenchiWeak": {
+      spend();
+      const floor = floorOf(room.ghost.loc);
+      log(room, "human", `👺 検知鬼くん(弱): 幽霊は${floor}階にいる!`, "good", { event: "floor", floor });
+      log(room, "ghost", `👺 ${hunterName(h)}が検知鬼くん(弱)を使った! ${floor}階にいることを知られた`, "bad", { event: "floor", floor });
+      return;
+    }
+    case "scroll":
+      drop();
+      h.wallwalk = true;
+      log(room, "human", `📜 ${hunterName(h)}は壁抜けの巻物を読んだ。このターンは壁を抜けて動ける`, "good");
+      return;
+    case "ticket": {
+      const mate = fromSlot !== undefined ? room.hunters[fromSlot] : undefined;
+      if (!mate || mate === h || !mate.alive) throw new GameError("アイテムをもらう仲間を選んでください");
+      const got = mate.items.find((i) => i.id === takeId);
+      if (!got) throw new GameError("その仲間はそのアイテムを持っていません");
+      drop();
+      mate.items = mate.items.filter((i) => i !== got);
+      h.items.push(got);
+      log(room, "human", `🎫 遠隔取引券: ${hunterName(h)}は${hunterName(mate)}から${ITEMS[got.kind].name}を受け取った`, "good");
+      return;
+    }
     case "gambler":
       spend();
       h.gamblerNext = true;
@@ -1150,15 +1193,13 @@ function pickupPlaced(room: RoomState, h: Hunter, itemId: string): void {
   if (h.items.length >= capacity(h)) throw new GameError("持ち物がいっぱいです");
   const p = room.placed;
   const bell = p.bells.find((b) => b.item.id === itemId);
-  const ofuda = p.ofuda.find((o) => o.item.id === itemId);
   const mirror = p.mirrors.find((m) => m.item.id === itemId);
-  const where = bell ? bell.room : ofuda ? SPOT[ofuda.spot].room : mirror ? SPOT[mirror.spot].room : null;
+  const where = bell ? bell.room : mirror ? SPOT[mirror.spot].room : null;
   if (!where) throw new GameError("回収できるものがありません");
   if (where !== h.loc) throw new GameError("同じ部屋にあるものだけ回収できます");
   if (bell) p.bells = p.bells.filter((b) => b !== bell);
-  if (ofuda) p.ofuda = p.ofuda.filter((o) => o !== ofuda);
   if (mirror) p.mirrors = p.mirrors.filter((m) => m !== mirror);
-  const item = (bell ?? ofuda ?? mirror)!.item;
+  const item = (bell ?? mirror)!.item;
   h.items.push(item);
   log(room, "human", `${hunterName(h)}は${ITEMS[item.kind].name}を回収した`, "info", { loc: where });
 }
@@ -1243,6 +1284,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
       mediumUsed: h.mediumUsed,
       gamblerNext: isHuman ? h.gamblerNext : false,
       stunned: h.stunned,
+      wallwalk: isHuman ? h.wallwalk : false,
     })),
     ghost: showGhost ? { ...room.ghost, visible: true, held: isGhost ? room.ghost.held : [] } : null,
     turn: playing
@@ -1263,6 +1305,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
     ghostCandles: isGhost ? room.ghostCandles : [],
     doorBlocks: room.doorBlocks.filter((d) => room.ghostTurns < d.until),
     phone: room.phone,
+    stairsBlocked: stairsBlocked(room),
     hidden: ended ? room.hidden : null,
     lock: isGhost ? room.lock : null,
     ghostTurns: room.ghostTurns,
@@ -1301,6 +1344,8 @@ export function botAct(room: RoomState, actorId: string): RoomState {
     if (ready("scrap") && g.hp < ghostMaxHp(room)) return step({ t: "gtool", kind: "scrap" });
     if (ready("jizo") && Math.random() < 0.3) return step({ t: "gtool", kind: "jizo", door: pick(DOOR_IDS) });
     if (ready("phone") && !room.phone && Math.random() < 0.3) return step({ t: "gtool", kind: "phone" });
+    if (ready("stairs") && Math.random() < 0.3) return step({ t: "gtool", kind: "stairs" });
+    if (ready("twins") && !room.twins && Math.random() < 0.5) return step({ t: "gtool", kind: "twins" });
     if (ready("letter") && SPOTS.some((s) => !room.ghostKnow[s.id]) && Math.random() < 0.5) return step({ t: "gtool", kind: "letter" });
     if (t.step === "resolve") {
       const c = room.spots[t.resolveSpot!];
@@ -1333,7 +1378,9 @@ export function botAct(room: RoomState, actorId: string): RoomState {
   if (!isHall(h.loc) && here.length && (t.budget < MOVE_COST || Math.random() < 0.4)) {
     return step({ t: "search", spot: pick(here).id });
   }
-  const open = HUMAN_ADJ[h.loc].filter((l) => !doorBlocked(room, h.loc, l) && (!room.phone || phoneAllows(h.loc, l)));
+  const open = HUMAN_ADJ[h.loc].filter(
+    (l) => !doorBlocked(room, h.loc, l) && (!room.phone || phoneAllows(h.loc, l)) && !(stairsBlocked(room) && isHall(h.loc) && isHall(l))
+  );
   if (t.budget >= MOVE_COST && open.length) return step({ t: "move", loc: pick(open) });
   return step({ t: "end" });
 }

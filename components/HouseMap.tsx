@@ -253,7 +253,6 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
               const hot = clickable && !glow?.has(r);
               const isSel = selected === s.id;
               const icon = knownIcon(room.known[s.id]);
-              const ofuda = placed?.ofuda.some((o) => o.spot === s.id);
               const mirror = placed?.mirrors.some((m) => m.spot === s.id);
               const searched = know?.ghostSearched.includes(s.id);
               const humanCost = Math.max(0, s.cost - 1);
@@ -289,7 +288,6 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
                     </text>
                   )}
                   <text x={rect.x + rect.w - 5} y={rect.y + rect.h - 8} textAnchor="end" fontSize="14">
-                    {ofuda ? "📜" : ""}
                     {mirror ? "🪞" : ""}
                     {searched ? "👣" : ""}
                   </text>

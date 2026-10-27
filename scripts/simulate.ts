@@ -26,8 +26,8 @@ for (let i = 0; i < 200; i++) {
   const ghostSpots = SPOTS.filter((s) => room.spots[s.id]?.type === "ghost");
   assert.equal(ghostSpots.length, 3);
   assert.ok(ghostSpots.filter((s) => s.cost === 3).length >= 2);
-  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "human").length, 13);
-  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 5);
+  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "human").length, 15);
+  assert.equal(SPOTS.filter((s) => room.spots[s.id]?.type === "tool").length, 7);
   const flash = SPOTS.find((s) => {
     const c = room.spots[s.id];
     return c?.type === "human" && c.item.kind === "flashlight";
@@ -89,17 +89,15 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // The talisman hurts when the ghost steps on its spot; the hand mirror locks the room.
+  // The hand mirror locks the room the ghost hides in.
   const room = newGame();
   room.ghost.loc = "hall1";
   room.ghost.spot = null;
   room.ghost.hp = 2;
-  room.placed.ofuda.push({ spot: "kitchen-0", item: { id: "o", kind: "ofuda" } });
   room.placed.mirrors.push({ spot: "kitchen-1", item: { id: "m", kind: "mirror" } });
   act(room, ghostId(room), { t: "roll" });
   room.turn.budget = 12;
   act(room, ghostId(room), { t: "gmove", to: "kitchen-0" });
-  assert.equal(room.ghost.hp, 1);
   act(room, ghostId(room), { t: "gmove", to: "kitchen-1" });
   act(room, ghostId(room), { t: "end" });
   assert.equal(room.lock?.room, "kitchen");
@@ -301,19 +299,19 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   act(room, ghostId(room), { t: "gtool", kind: "tablet" });
   assert.equal(room.ghost.tools[0].uses, 2, "the tablet has 3 uses");
   assert.throws(() => act(room, ghostId(room), { t: "gtool", kind: "tablet" }), /もう使いました/);
-  const cursed = room.hunters.find((h) => h.stunned)!;
-  assert.ok(cursed, "someone is cursed");
+  const cursed = room.hunters.filter((h) => h.stunned);
+  assert.equal(cursed.length, 2, "two are cursed");
   assert.equal(room.logs.at(-1)!.event, "curse");
   act(room, ghostId(room), { t: "end" });
-  // Walk through the human turns: the cursed one is skipped once.
+  // Walk through the human turns: the cursed ones are skipped once.
   const played: number[] = [];
   while (room.turn.side === "human") {
     played.push(room.turn.hunter);
     act(room, room.hunters[room.turn.hunter].controller, { t: "end" });
   }
-  assert.ok(!played.includes(cursed.slot));
-  assert.equal(played.length, 2);
-  assert.equal(cursed.stunned, false);
+  assert.ok(cursed.every((c) => !played.includes(c.slot)));
+  assert.equal(played.length, 1);
+  assert.ok(cursed.every((c) => !c.stunned));
 }
 
 {
@@ -477,17 +475,13 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // Damage from the talisman or holy water is a popup.
+  // Damage from holy water is a popup.
   const room = newGame();
-  room.ghost.loc = "hall1";
-  room.ghost.spot = null;
+  room.ghost.loc = "toilet";
+  room.ghost.spot = "toilet-0";
   room.ghost.hp = 3;
   room.ghost.collected = 1;
-  room.placed.ofuda.push({ spot: "toilet-0", item: { id: "o", kind: "ofuda" } });
   act(room, ghostId(room), { t: "roll" });
-  room.turn.budget = 4;
-  act(room, ghostId(room), { t: "gmove", to: "toilet-0" });
-  assert.equal(room.logs.at(-1)!.event, "trap");
   act(room, ghostId(room), { t: "end" });
   room.hunters[0].items = [{ id: "hw", kind: "holywater" }];
   room.turn.step = "move";
@@ -498,24 +492,24 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // Full hand: swapping out a talisman can set it on the searched spot as a trap.
+  // Full hand: swapping out a hand mirror can set it on the searched spot as a trap.
   const room = newGame();
   room.ghost.loc = "attic";
   room.ghost.spot = "attic-0";
   room.spots["toilet-1"] = { type: "human", item: { id: "kn", kind: "kenchi", uses: 3 } };
   room.hunters[0].items = [
-    { id: "of", kind: "ofuda" },
+    { id: "mi", kind: "mirror" },
     { id: "bl", kind: "bell" },
     ...(room.hunters[0].character === "painter" ? [{ id: "dl", kind: "doll" as const }] : []),
   ];
   toHunters(room);
   act(room, "host", { t: "move", loc: "toilet" });
   act(room, "host", { t: "search", spot: "toilet-1" });
-  act(room, "host", { t: "resolve", take: true, leave: "of", setTrap: true });
+  act(room, "host", { t: "resolve", take: true, leave: "mi", setTrap: true });
   assert.ok(room.hunters[0].items.some((i) => i.kind === "kenchi"));
-  assert.ok(!room.hunters[0].items.some((i) => i.kind === "ofuda"));
-  assert.deepEqual(room.placed.ofuda.map((o) => o.spot), ["toilet-1"]);
-  assert.equal(room.spots["toilet-1"], null, "the spot itself is empty; the talisman is set on it");
+  assert.ok(!room.hunters[0].items.some((i) => i.kind === "mirror"));
+  assert.deepEqual(room.placed.mirrors.map((o) => o.spot), ["toilet-1"]);
+  assert.equal(room.spots["toilet-1"], null, "the spot itself is empty; the mirror is set on it");
 }
 
 {
@@ -540,19 +534,93 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // 赤い手紙: reveals one spot the ghost hasn't searched, onto the ghost's map only.
+  // 死者からの手紙: reveals one spot the ghost hasn't searched, onto the ghost's map only.
   const room = newGame();
   room.ghost.tools = [{ kind: "letter", uses: 1 }];
   for (const s of SPOTS) if (s.id !== "attic-2") room.ghostKnow[s.id] = { type: "empty" };
   room.spots["attic-2"] = { type: "human", item: { id: "x", kind: "sword" } };
-  room.placed.ofuda.push({ spot: "attic-2", item: { id: "o2", kind: "ofuda" } });
+  room.placed.mirrors.push({ spot: "attic-2", item: { id: "m2", kind: "mirror" } });
   act(room, ghostId(room), { t: "gtool", kind: "letter" });
   assert.deepEqual(room.ghostKnow["attic-2"], { type: "human", kind: "sword" });
   const letter = room.logs.at(-1)!;
   assert.equal(letter.event, "letter");
   assert.equal(letter.to, "ghost");
-  assert.ok(!letter.text.includes("落魂札"), "a set talisman isn't revealed");
+  assert.ok(!letter.text.includes("手鏡"), "a set mirror isn't revealed");
   assert.equal(viewFor(room, ghostId(room)).placed, null);
+}
+
+{
+  // 地縛霊の石板 curses two humans at once.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "tablet", uses: 3 }];
+  act(room, ghostId(room), { t: "gtool", kind: "tablet" });
+  assert.equal(room.hunters.filter((h) => h.stunned).length, 2);
+}
+
+{
+  // 十三階段の思い出: no changing floors through the humans' next two rounds.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "stairs", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "stairs" });
+  assert.equal(room.logs.at(-1)!.event, "stairs");
+  const roundOfHumans = () => {
+    while (room.turn.side === "human") act(room, room.hunters[room.turn.hunter].controller, { t: "end" });
+  };
+  for (let round = 0; round < 2; round++) {
+    toHunters(room);
+    assert.equal(viewFor(room, "host").stairsBlocked, true);
+    assert.throws(() => act(room, room.hunters[room.turn.hunter].controller, { t: "move", loc: "hall2" }), /十三階段/);
+    roundOfHumans();
+  }
+  toHunters(room);
+  act(room, room.hunters[room.turn.hunter].controller, { t: "move", loc: "hall2" });
+  assert.equal(room.hunters[room.turn.hunter].loc, "hall2", "after two rounds the stairs are open again");
+}
+
+{
+  // 双子の幽霊: the next noise comes from three rooms, the real one among them.
+  const room = newGame();
+  room.ghost.loc = "living";
+  room.ghost.spot = "living-0";
+  room.ghost.tools = [{ kind: "twins", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "twins" });
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 6;
+  act(room, ghostId(room), { t: "search", spot: "living-1" });
+  const noise = room.logs.find((l) => l.to === "human" && l.event === "noise")!;
+  assert.equal(noise.locs!.length, 3);
+  assert.ok(noise.locs!.includes("living"));
+  assert.equal(new Set(noise.locs).size, 3);
+  assert.equal(room.twins, false, "used up");
+}
+
+{
+  // 遠隔取引券: fetch a teammate's item from anywhere; 検知鬼くん(弱): the floor; 壁抜けの巻物: through walls for a turn.
+  const room = newGame();
+  room.ghost.loc = "study";
+  room.ghost.spot = "study-0";
+  toHunters(room, 6);
+  const [a, b] = room.hunters;
+  b.loc = "attic";
+  a.items = [
+    { id: "tk", kind: "ticket" },
+    { id: "kw", kind: "kenchiWeak", uses: 1 },
+  ];
+  b.items = [{ id: "sw", kind: "sword" }];
+  act(room, "host", { t: "use", item: "tk", from: b.slot, take: "sw" });
+  assert.deepEqual(a.items.map((i) => i.kind).sort(), ["kenchiWeak", "sword"]);
+  assert.equal(b.items.length, 0);
+  act(room, "host", { t: "use", item: "kw" });
+  const floor = room.logs.filter((l) => l.event === "floor");
+  assert.deepEqual(floor.map((l) => [l.to, l.floor]).sort(), [["ghost", 2], ["human", 2]]);
+  a.items = [{ id: "sc", kind: "scroll" }];
+  a.loc = "hall1";
+  assert.throws(() => act(room, "host", { t: "move", loc: "bath" }), /出入口/);
+  act(room, "host", { t: "use", item: "sc" });
+  act(room, "host", { t: "move", loc: "bath" });
+  assert.equal(a.loc, "bath", "through the wall");
+  act(room, "host", { t: "end" });
+  assert.equal(a.wallwalk, true, "until this hunter's next turn starts");
 }
 
 {

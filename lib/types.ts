@@ -50,6 +50,8 @@ export interface Hunter {
   gamblerNext: boolean;
   /** 地縛霊の石板: this character loses its next turn. */
   stunned: boolean;
+  /** 壁抜けの巻物 read this turn: moves like the ghost, through walls. */
+  wallwalk: boolean;
 }
 
 export interface GhostState {
@@ -73,7 +75,6 @@ export interface GhostState {
 /** Human-placed things. Humans always see these; the ghost only finds out when one goes off. */
 export interface Placed {
   bells: { room: RoomId; item: Item }[];
-  ofuda: { spot: string; item: Item }[];
   mirrors: { spot: string; item: Item }[];
   /** Blocks the room while ghostTurns < until. */
   holy: { room: RoomId; until: number }[];
@@ -134,9 +135,13 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter" | "stairs" | "twins" | "floor";
   /** Damage dealt, for a hit. */
   amount?: number;
+  /** Several places at once (a noise with the 双子の幽霊's fakes). */
+  locs?: LocId[];
+  /** A floor (検知鬼くん(弱)). */
+  floor?: 1 | 2;
 }
 
 export interface HumanKnowledge {
@@ -182,6 +187,10 @@ export interface RoomState {
   doorBlocks: DoorBlock[];
   /** あの世の電話 is ringing: humans can't enter rooms until one of them reaches the attic (public). */
   phone: boolean;
+  /** 十三階段の思い出: humans can't change floors while ghostTurns < stairsUntil (public). */
+  stairsUntil: number;
+  /** 双子の幽霊 is waiting: the next noise the humans hear comes with two fakes. */
+  twins: boolean;
   turn: TurnState;
   escape: EscapeState | null;
   /** Normal ghost turns completed. */
@@ -216,6 +225,7 @@ export interface ClientHunter {
   mediumUsed: boolean;
   gamblerNext: boolean;
   stunned: boolean;
+  wallwalk: boolean;
 }
 
 export interface ClientRoom {
@@ -242,6 +252,8 @@ export interface ClientRoom {
   ghostCandles: RoomId[];
   doorBlocks: DoorBlock[];
   phone: boolean;
+  /** 十三階段の思い出 is in force. */
+  stairsBlocked: boolean;
   hidden: RoomState["hidden"];
   lock: RoomState["lock"];
   ghostTurns: number;
@@ -268,7 +280,8 @@ export type Action =
   | { t: "medium" }
   | { t: "forced"; room: RoomId }
   | { t: "psychic"; loc: LocId }
-  | { t: "use"; item: string; spot?: string }
+  /** `spot`: where a spot item goes. `from` / `take`: the teammate and item a 遠隔取引券 fetches. */
+  | { t: "use"; item: string; spot?: string; from?: number; take?: string }
   | { t: "pickup"; item: string }
   /** Hand an item to / take one from a teammate in the same place; `swap` sends one back when the hands are full. */
   | { t: "give"; item: string; to: number; swap?: string }
