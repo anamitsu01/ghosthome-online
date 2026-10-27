@@ -595,6 +595,30 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
+  // 双子の幽霊 called but no noise that turn: gone when the turn ends.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "twins", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "twins" });
+  act(room, ghostId(room), { t: "roll" });
+  act(room, ghostId(room), { t: "end" });
+  assert.equal(room.twins, false);
+}
+
+{
+  // 壁抜けの巻物 also goes through a door shut by the 首無し地蔵.
+  const room = newGame();
+  room.ghost.tools = [{ kind: "jizo", uses: 1 }];
+  act(room, ghostId(room), { t: "gtool", kind: "jizo", door: "hall1|toilet" });
+  toHunters(room);
+  const h = room.hunters[room.turn.hunter];
+  assert.throws(() => act(room, h.controller, { t: "move", loc: "toilet" }), /塞がれて/);
+  h.items = [{ id: "sc2", kind: "scroll" }];
+  act(room, h.controller, { t: "use", item: "sc2" });
+  act(room, h.controller, { t: "move", loc: "toilet" });
+  assert.equal(h.loc, "toilet");
+}
+
+{
   // 遠隔取引券: fetch a teammate's item from anywhere; 検知鬼くん(弱): the floor; 壁抜けの巻物: through walls for a turn.
   const room = newGame();
   room.ghost.loc = "study";

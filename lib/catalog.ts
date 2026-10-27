@@ -55,7 +55,7 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   redbeads: { kind: "redbeads", name: "赤い数珠", icon: "📿", use: "passive", desc: "青い数珠と両方持っていればサイコロ+1。" },
   ticket: { kind: "ticket", name: "遠隔取引券", icon: "🎫", use: "trade", desc: "どこにいる仲間からでもアイテムを1つもらえる(券と入れ替わりで手に入る)。使い捨て。" },
   kenchiWeak: { kind: "kenchiWeak", name: "検知鬼くん(弱)", icon: "👺", use: "self", uses: 1, desc: "幽霊が1階と2階のどちらにいるかが分かる。使い捨て。使ったことは幽霊にも伝わる。" },
-  scroll: { kind: "scroll", name: "壁抜けの巻物", icon: "📜", use: "self", desc: "使ったターンの間、幽霊と同じように壁を抜けて移動できる。使い捨て。" },
+  scroll: { kind: "scroll", name: "壁抜けの巻物", icon: "📜", use: "self", desc: "使ったターンの間、幽霊と同じように壁を抜けて移動できる(首無し地蔵に塞がれた扉も通れる)。使い捨て。" },
   bluebeads: { kind: "bluebeads", name: "青い数珠", icon: "🧿", use: "passive", desc: "赤い数珠と両方持っていればサイコロ+1。" },
   stone: { kind: "stone", name: "正邪の秘石", icon: "💎", use: "passive", desc: "隠しアイテム。完全復活した幽霊に殺されるとき1ダメージを返す。" },
   spear: { kind: "spear", name: "獣の槍", icon: "🔱", use: "passive", desc: "隠しアイテム。幽霊を探索で見つけたときのダメージが2になる(復活前も後も)。" },
@@ -110,7 +110,7 @@ export const GHOST_TOOLS: Record<GhostToolKind, { name: string; icon: string; de
   twins: {
     name: "双子の幽霊",
     icon: "👥",
-    desc: "次に気配が人間に伝わるとき、本当の部屋に加えてランダムな2部屋からも気配がする。使い捨て。",
+    desc: "使ったターンに気配が人間に伝わると、本当の部屋に加えてランダムな2部屋からも気配がする。使い捨て。",
     uses: 1,
   },
 };

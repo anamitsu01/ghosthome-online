@@ -189,7 +189,7 @@ export interface RoomState {
   phone: boolean;
   /** 十三階段の思い出: humans can't change floors while ghostTurns < stairsUntil (public). */
   stairsUntil: number;
-  /** 双子の幽霊 is waiting: the next noise the humans hear comes with two fakes. */
+  /** 双子の幽霊 is out this ghost turn: a noise the humans hear comes with two fakes. */
   twins: boolean;
   turn: TurnState;
   escape: EscapeState | null;

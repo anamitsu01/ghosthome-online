@@ -145,7 +145,7 @@ export default function GameBoard({ room, viewerId, act }: { room: ClientRoom; v
         (active.wallwalk ? GHOST_ADJ : HUMAN_ADJ)[active.loc]
           .filter(
             (l) =>
-              !(HUMAN_ADJ[active.loc].includes(l) && shut.has(doorId(active.loc, l))) &&
+              (active.wallwalk || !shut.has(doorId(active.loc, l))) &&
               (!room.phone || phoneAllows(active.loc, l)) &&
               !(room.stairsBlocked && isHall(active.loc) && isHall(l))
           )
@@ -1049,7 +1049,7 @@ function FoundPopup({ room }: { room: ClientRoom }) {
       <InfoPopup
         icon="👥"
         title="双子の幽霊が控えている"
-        note="次に気配が人間に伝わるとき、ほかの2部屋からも気配がする。"
+        note="このターンに気配が人間に伝わると、ほかの2部屋からも気配がする(ターンが終わると消える)。"
         tone="good"
         onClose={close}
       />

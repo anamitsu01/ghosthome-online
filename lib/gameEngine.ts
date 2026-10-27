@@ -626,6 +626,11 @@ function ghostWarp(room: RoomState, spotId: string): void {
 
 function finishGhostTurn(room: RoomState): void {
   ghostHide(room, true);
+  // The twins only stay out for the turn they were called in.
+  if (room.twins) {
+    room.twins = false;
+    log(room, "ghost", "👥 双子の幽霊は消えていった(このターンは気配が伝わらなかった)", "info");
+  }
   room.ghostTurns += 1;
   if (room.lock && room.ghostTurns >= room.lock.until) room.lock = null;
   room.placed.holy = room.placed.holy.filter((h) => room.ghostTurns < h.until);
@@ -694,7 +699,7 @@ function applyGhostTool(room: RoomState, kind: GhostToolKind, door?: string): vo
   } else if (kind === "twins") {
     if (room.twins) throw new GameError("双子の幽霊はもう待っています");
     room.twins = true;
-    log(room, "ghost", "👥 双子の幽霊が控えている。次に気配が伝わるとき、ほかの2部屋からも気配がする", "good", { event: "twins" });
+    log(room, "ghost", "👥 双子の幽霊が控えている。このターンに気配が伝わると、ほかの2部屋からも気配がする", "good", { event: "twins" });
   } else if (kind === "jizo") {
     if (!door || !DOOR_IDS.includes(door)) throw new GameError("塞ぐ扉を選んでください");
     // Shut through the humans' next round, until this ghost's next turn ends.
@@ -940,7 +945,8 @@ function hunterAction(room: RoomState, h: Hunter, action: Action): void {
       if (!adj[h.loc].includes(action.loc)) {
         throw new GameError(h.wallwalk ? "隣の部屋・廊下にしか行けません" : "出入口でつながった隣の部屋・廊下にしか行けません");
       }
-      if (HUMAN_ADJ[h.loc].includes(action.loc) && doorBlocked(room, h.loc, action.loc)) throw new GameError("首無し地蔵に扉を塞がれていて通れません");
+      // The scroll goes through walls, and through a door the 首無し地蔵 shut as well.
+      if (!h.wallwalk && doorBlocked(room, h.loc, action.loc)) throw new GameError("首無し地蔵に扉を塞がれていて通れません");
       if (stairsBlocked(room) && isHall(h.loc) && isHall(action.loc)) throw new GameError("十三階段の思い出で、階を移動できません");
       if (room.phone && !phoneAllows(h.loc, action.loc)) throw new GameError("あの世の電話が鳴っていて、屋根裏部屋に誰かが入るまで部屋には入れません");
       if (MOVE_COST > t.budget) throw new GameError(`移動力が足りません(必要 ${MOVE_COST})`);
