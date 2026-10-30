@@ -52,6 +52,8 @@ export interface Hunter {
   stunned: boolean;
   /** 壁抜けの巻物 read this turn: moves like the ghost, through walls. */
   wallwalk: boolean;
+  /** Struck down but saved by the 身代わり人形: out of play until its next turn, when it rises again. */
+  downed: boolean;
 }
 
 export interface GhostState {
@@ -138,7 +140,7 @@ export interface LogEntry {
   /** An item was discovered: shown as a popup to this side. */
   found?: KnownSpot;
   /** A moment shown as a popup: the full revival, a hit on the ghost, a noise heard, 検知鬼くん, a bell. */
-  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter" | "stairs" | "twins" | "floor" | "hole";
+  event?: "revive" | "hit" | "noise" | "kenchi" | "bell" | "forced" | "curse" | "candle" | "jizo" | "medium" | "trap" | "phone" | "phoneEnd" | "letter" | "stairs" | "twins" | "floor" | "hole" | "down" | "rise";
   /** Damage dealt, for a hit. */
   amount?: number;
   /** Several places at once (a noise with the 双子の幽霊's fakes). */
@@ -229,6 +231,7 @@ export interface ClientHunter {
   gamblerNext: boolean;
   stunned: boolean;
   wallwalk: boolean;
+  downed: boolean;
 }
 
 export interface ClientRoom {

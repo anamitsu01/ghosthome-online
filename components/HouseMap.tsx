@@ -312,12 +312,17 @@ function FloorPlan({ floor, room, targets, selected, onSpot, onLoc, flashes, glo
             const c = CHARACTERS[h.character];
             const active = room.turn?.side === "human" && room.turn.hunter === h.slot && !room.escape;
             return (
-              <HunterToken key={h.slot} x={x0 + i * 32} y={y} loc={loc} dim={!h.alive}>
+              <HunterToken key={h.slot} x={x0 + i * 32} y={y} loc={loc} dim={!h.alive || h.downed}>
                 {active && <circle r="19" fill="none" stroke="#ffe08a" strokeWidth="2.5" className="gh-breathe" />}
                 <circle r="15" fill={c.color} stroke="#0b0918" strokeWidth="2" />
                 <text y="6" textAnchor="middle" fontSize="17" fontWeight="900" fill="#1d1b3a">
                   {h.alive ? c.icon : "✝"}
                 </text>
+                {h.alive && h.downed && (
+                  <text x="12" y="-8" fontSize="14">
+                    🧸
+                  </text>
+                )}
                 {h.alive && h.stunned && (
                   <text x="12" y="-8" fontSize="14">
                     🪦

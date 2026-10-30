@@ -247,7 +247,7 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
 }
 
 {
-  // Saved by the doll while holding the spear: 2 damage back on the spot.
+  // Saved by the doll: the hunter goes down, rises on its next turn, and strikes then if the ghost is there.
   const room = newGame();
   room.ghost.revived = true;
   room.ghost.hp = 3;
@@ -262,8 +262,39 @@ function give(room: RoomState, slot: number, kind: Item["kind"]) {
   act(room, ghostId(room), { t: "roll" });
   room.turn.budget = 4; // the 科学者 makes entering cost 4
   act(room, ghostId(room), { t: "gmove", to: "toilet" });
-  assert.equal(room.hunters[0].alive, true);
+  const h = room.hunters[0];
+  assert.equal(h.alive, true);
+  assert.equal(h.downed, true);
+  assert.equal(room.ghost.hp, 3, "no strike back on the spot any more");
+  assert.equal(room.logs.at(-1)!.event, "down");
+  act(room, ghostId(room), { t: "end" });
+  // Its turn comes: it rises, and the ghost still in the toilet takes the spear's 2.
+  assert.equal(h.downed, false);
   assert.equal(room.ghost.hp, 1);
+  assert.ok(room.escape, "the ghost escapes, then the risen hunter plays");
+  act(room, ghostId(room), { t: "roll" });
+  act(room, ghostId(room), { t: "end" });
+  assert.equal(room.turn.hunter, 0);
+}
+
+{
+  // A downed hunter is out of reach: the ghost can't finish it, and it keeps the game going.
+  const room = newGame();
+  room.ghost.revived = true;
+  room.ghost.hp = 3;
+  room.ghost.loc = "hall1";
+  room.ghost.spot = null;
+  room.hunters.forEach((h) => (h.loc = "toilet"));
+  room.hunters[0].items = [{ id: "dl2", kind: "doll" }];
+  room.hunters[1].items = [];
+  room.hunters[2].items = [];
+  act(room, ghostId(room), { t: "roll" });
+  room.turn.budget = 12;
+  act(room, ghostId(room), { t: "gmove", to: "toilet" });
+  assert.equal(room.phase, "playing", "one is only down");
+  act(room, ghostId(room), { t: "gmove", to: "hall1" });
+  act(room, ghostId(room), { t: "gmove", to: "toilet" });
+  assert.equal(room.hunters[0].alive, true);
 }
 
 {

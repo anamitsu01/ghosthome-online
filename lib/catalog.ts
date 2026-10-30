@@ -44,10 +44,10 @@ export interface ItemDef {
 export const ITEMS: Record<ItemKind, ItemDef> = {
   bell: { kind: "bell", name: "聖なる鈴", icon: "🔔", use: "room", retrievable: true, desc: "部屋に設置。幽霊がその部屋に入るたびに鳴り、人間全員に知らせる(鳴ったことは幽霊にも分かる)。" },
   kenchi: { kind: "kenchi", name: "検知鬼くん", icon: "👹", use: "self", uses: 1, desc: "幽霊のいる部屋が分かる。同じ部屋なら潜伏場所まで分かる。使い捨て。使ったことは幽霊にも伝わる。" },
-  doll: { kind: "doll", name: "身代わり人形", icon: "🧸", use: "passive", desc: "完全復活した幽霊の攻撃を1度だけ防ぐ。防ぐと消える(獣の槍も持っていれば、その場で幽霊に2ダメージ)。" },
+  doll: { kind: "doll", name: "身代わり人形", icon: "🧸", use: "passive", desc: "完全復活した幽霊に襲われても1度だけ死なずに倒れ、次の自分のターンに甦る(人形は消える)。甦ったとき幽霊が同じ場所にいれば、獣の槍・勾玉の剣でダメージ。" },
   holywater: { kind: "holywater", name: "聖水", icon: "💧", use: "room", desc: "今いる部屋(幽霊の完全復活後は廊下も)に撒く。次の幽霊ターンが終わるまで幽霊はそこに入れない。幽霊がそこにいれば1ダメージ。" },
   crystal: { kind: "crystal", name: "水晶玉", icon: "🔮", use: "passive", desc: "人間の誰かが持っていれば、幽霊のサイコロの目がいつも見える。" },
-  sword: { kind: "sword", name: "勾玉の剣", icon: "🗡️", use: "passive", desc: "完全復活した幽霊のいる部屋・廊下に入ると1ダメージ(獣の槍と両方持っていても2)。" },
+  sword: { kind: "sword", name: "勾玉の剣", icon: "🗡️", use: "passive", desc: "完全復活した幽霊のいる部屋・廊下に入ったとき(身代わり人形で甦ったときも)1ダメージ(獣の槍と両方持っていても2)。" },
   gambler: { kind: "gambler", name: "ギャンブラーのサイコロ", icon: "🎲", use: "self", uses: 3, desc: "使った次の自分のターン、サイコロが1個増える。3回まで。" },
   flashlight: { kind: "flashlight", name: "懐中電灯", icon: "🔦", use: "passive", desc: "持って隠しアイテムのある部屋に入ると、懐中電灯と引き換えにその場で隠しアイテムを手に入れる。" },
   candle: { kind: "candle", name: "マッチと蝋燭", icon: "🕯️", use: "room", desc: "今いる部屋に設置。幽霊がその部屋で探索するコストが+2(ゲーム終了まで)。幽霊は部屋に入ると気づく。使い捨て。" },
@@ -58,7 +58,7 @@ export const ITEMS: Record<ItemKind, ItemDef> = {
   scroll: { kind: "scroll", name: "壁抜けの巻物", icon: "📜", use: "self", desc: "使ったターンの間、幽霊と同じように壁を抜けて移動できる(首無し地蔵に塞がれた扉も通れる)。使い捨て。" },
   bluebeads: { kind: "bluebeads", name: "青い数珠", icon: "🧿", use: "passive", desc: "赤い数珠と両方持っていればサイコロ+1。" },
   stone: { kind: "stone", name: "正邪の秘石", icon: "💎", use: "passive", desc: "隠しアイテム。完全復活した幽霊に殺されるとき1ダメージを返す。" },
-  spear: { kind: "spear", name: "獣の槍", icon: "🔱", use: "passive", desc: "隠しアイテム。幽霊を探索で見つけたときのダメージが2。完全復活した幽霊のいる部屋・廊下に入っても2ダメージ。身代わり人形で助かったときも、その場で2ダメージを返す。" },
+  spear: { kind: "spear", name: "獣の槍", icon: "🔱", use: "passive", desc: "隠しアイテム。幽霊を探索で見つけたときのダメージが2。完全復活した幽霊のいる部屋・廊下に入ったとき(身代わり人形で甦ったときも)2ダメージ。" },
   fake: { kind: "fake", name: "偽物", icon: "🎭", use: "passive", desc: "手品師の偽の幽霊アイテム。探索した潜伏場所に置くと、幽霊が拾って本物だと思い込む。" },
 };
 

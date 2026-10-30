@@ -586,6 +586,7 @@ function HuntersPublic({ room }: { room: ClientRoom }) {
             <span>{CHARACTERS[h.character].name}</span>
             <span className="text-white/50">{locName(h.loc)}</span>
             {h.alive && h.stunned && <span className="text-xs text-red-300">🪦呪い</span>}
+            {h.alive && h.downed && <span className="text-xs text-amber-300">🧸倒れている</span>}
             <span className="ml-auto text-xs text-white/40">道具 {h.itemCount}個</span>
           </li>
         ))}
@@ -963,6 +964,7 @@ function HuntersPanel({ room, viewerId }: { room: ClientRoom; viewerId: string }
                   : <span className="text-white/30">持ち物なし</span>}
                 {h.gamblerNext && <span className="ml-1 text-gold">🎲次ターン+1</span>}
                 {h.alive && h.stunned && <span className="ml-1 text-red-300">🪦次ターン行動不能</span>}
+                {h.alive && h.downed && <span className="ml-1 text-amber-300">🧸倒れている(次のターンに甦る)</span>}
               </p>
             </li>
           );
@@ -1048,6 +1050,30 @@ function FoundPopup({ room }: { room: ClientRoom }) {
   const place = entry?.spot ? spotName(entry.spot) : entry?.loc ? locName(entry.loc) : undefined;
   const isGhost = room.viewerSide === "ghost";
   if (entry?.event === "noise") return <NoisePopup spot={entry.spot} loc={entry.loc} locs={entry.locs} onClose={close} />;
+  if (entry?.event === "down") {
+    return (
+      <InfoPopup
+        icon={<span className="gh-shake inline-block">🧸</span>}
+        title="身代わり人形が砕けた!"
+        place={place}
+        note={entry.text.replace(/^🧸 /, "")}
+        tone={isGhost ? "bad" : "good"}
+        onClose={close}
+      />
+    );
+  }
+  if (entry?.event === "rise") {
+    return (
+      <InfoPopup
+        icon="🧸"
+        title={entry.text.replace(/^🧸 /, "")}
+        place={place}
+        note="身代わり人形のおかげで命拾いした。"
+        tone={isGhost ? "bad" : "good"}
+        onClose={close}
+      />
+    );
+  }
   if (entry?.event === "hole") {
     return (
       <InfoPopup

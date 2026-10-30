@@ -299,6 +299,7 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
     gamblerNext: false,
     stunned: false,
     wallwalk: false,
+    downed: false,
   }));
 
   // Ghost items: at least 2 of the 3 behind cost-3 spots, no other evening out.
@@ -345,8 +346,9 @@ function beginPlay(room: RoomState, characters: CharacterId[]): void {
 
 // ---------- shared helpers ----------
 
+/** Hunters in play: alive and not lying downed (a downed one is out until it rises). */
 function aliveHunters(room: RoomState): Hunter[] {
-  return room.hunters.filter((h) => h.alive);
+  return room.hunters.filter((h) => h.alive && !h.downed);
 }
 
 function capacity(h: Hunter): number {
@@ -485,17 +487,17 @@ function ghostArrive(room: RoomState, loc: LocId, spot: string | null, canKill: 
     for (const h of aliveHunters(room).filter((x) => x.loc === loc)) {
       const doll = h.items.find((i) => i.kind === "doll");
       if (doll) {
+        // The doll takes the blow: the hunter goes down and rises on its next turn.
         h.items = h.items.filter((i) => i !== doll);
-        log(room, "all", `🧸 ${hunterName(h)}の身代わり人形が砕けた!`, "warn", { loc });
-        // Saved by the doll with the spear in hand: it strikes back right there.
-        if (has(h, "spear") && damageGhost(room, 2, `${hunterName(h)}が身代わり人形で甦り、獣の槍で反撃!`, { loc, event: "hit" })) return true;
+        h.downed = true;
+        log(room, "all", `🧸 ${hunterName(h)}は襲われたが、身代わり人形が砕けて命は助かった。次のターンに甦る`, "warn", { loc, event: "down" });
         continue;
       }
       h.alive = false;
       const stone = has(h, "stone");
       h.items = [];
       log(room, "all", `💀 ${hunterName(h)}は幽霊に襲われた…`, "bad", { loc });
-      if (!aliveHunters(room).length) {
+      if (!room.hunters.some((x) => x.alive)) {
         endGame(room, "ghost", "人間は全滅した…幽霊の勝利!");
         return true;
       }
@@ -865,13 +867,25 @@ function nextHunter(room: RoomState): void {
   // A cursed hunter loses this turn (and only this one).
   let after = room.turn.hunter;
   for (;;) {
-    const next = aliveHunters(room).find((h) => h.slot > after);
+    const next = room.hunters.find((h) => h.alive && h.slot > after);
     if (!next) return startGhostTurn(room);
+    if (next.downed) return riseAgain(room, next);
     if (!next.stunned) return startHunterTurn(room, next.slot);
     next.stunned = false;
     log(room, "all", `🪦 ${hunterName(next)}は呪いで動けない…(ターンを飛ばす)`, "bad", { loc: next.loc });
     after = next.slot;
   }
+}
+
+/**
+ * A hunter saved by the 身代わり人形 rises at the start of its next turn, and strikes the revived
+ * ghost straight away if it is right there and the hunter holds the 獣の槍 (2) or 勾玉の剣 (1).
+ */
+function riseAgain(room: RoomState, h: Hunter): void {
+  startHunterTurn(room, h.slot);
+  h.downed = false;
+  log(room, "all", `🧸 ${hunterName(h)}が甦った!`, "good", { loc: h.loc, event: "rise" });
+  strikeOnEntry(room, h);
 }
 
 /** The イカサマ師 never rolls a 1: 2 to 6, each 1 in 5. */
@@ -1036,7 +1050,7 @@ function strikeOnEntry(room: RoomState, h: Hunter): void {
   if (!g.revived || h.loc !== g.loc) return;
   const dmg = has(h, "spear") ? 2 : has(h, "sword") ? 1 : 0;
   if (!dmg) return;
-  if (damageGhost(room, dmg, `${hunterName(h)}が${locName(g.loc)}に踏み込み、${has(h, "spear") ? "獣の槍" : "勾玉の剣"}で`, { loc: g.loc, event: "hit" })) return;
+  if (damageGhost(room, dmg, `${hunterName(h)}が${locName(g.loc)}で${has(h, "spear") ? "獣の槍" : "勾玉の剣"}を振るい、`, { loc: g.loc, event: "hit" })) return;
   startEscape(room, "continue");
 }
 
@@ -1337,6 +1351,7 @@ export function viewFor(room: RoomState, viewerId: string): ClientRoom {
       gamblerNext: isHuman ? h.gamblerNext : false,
       stunned: h.stunned,
       wallwalk: isHuman ? h.wallwalk : false,
+      downed: h.downed,
     })),
     ghost: showGhost ? { ...room.ghost, visible: true, held: isGhost ? room.ghost.held : [] } : null,
     turn: playing
